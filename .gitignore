@@ -1,0 +1,13 @@
+# Files
+.DS_Store
+.env
+.erlang.crash.dump
+*.pdf
+*.swp
+*.swo
+manifest.toml
+
+# Folders
+.vscode/
+/_build/
+build/
