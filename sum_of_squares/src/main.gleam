@@ -11,19 +11,12 @@ pub fn main() -> Nil {
   case get_input_list(line) {
     Ok(pair) -> {
       let #(n, k) = pair
-      case k <= n {
-        True -> {
-          let before_time: Float =
-            timestamp.to_unix_seconds(timestamp.system_time())
-          runner.bootstrap(n, k)
-          let execution_time: Float =
-            timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
-          io.println("Execution Time: " <> float.to_string(execution_time))
-        }
-        False -> {
-          io.println("Invalid inputs, k must be less than n")
-        }
-      }
+      let before_time: Float =
+        timestamp.to_unix_seconds(timestamp.system_time())
+      runner.spawn_workers(n, k)
+      let execution_time: Float =
+        timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
+      io.println("Execution Time: " <> float.to_string(execution_time))
     }
     Error(msg) -> {
       io.println("Error: " <> msg)

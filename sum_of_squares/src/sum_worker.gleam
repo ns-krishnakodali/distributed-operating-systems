@@ -22,8 +22,8 @@ fn handle_message(
   message: WorkerMessage,
 ) -> actor.Next(CollectorSubject, WorkerMessage) {
   case message {
-    ComputeSum(tasks_list, n, k) -> {
-      list.each(tasks_list, fn(n1) {
+    ComputeSum(tasks_list, k) -> {
+      list.each(tasks_list, fn(n1: Int) {
         let squares_sum: Int =
           sum_of_squares(n1 + k - 1) - sum_of_squares(n1 - 1)
         let sqrt_value: Float = case int.square_root(squares_sum) {
@@ -32,7 +32,7 @@ fn handle_message(
         }
         case float.floor(sqrt_value) == sqrt_value {
           True -> {
-            process.send(state, collector.Add(n + 1))
+            process.send(state, collector.Add(n1))
           }
           False -> Nil
         }
@@ -45,11 +45,11 @@ fn handle_message(
   }
 }
 
-pub fn sum_of_squares(n: Int) -> Int {
+fn sum_of_squares(n: Int) -> Int {
   { n * { n + 1 } * { 2 * n + 1 } / 6 }
 }
 
 pub type WorkerMessage {
-  ComputeSum(List(Int), Int, Int)
+  ComputeSum(List(Int), Int)
   Shutdown
 }
