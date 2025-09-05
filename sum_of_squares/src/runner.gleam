@@ -11,11 +11,10 @@ import sum_worker
 
 pub fn bootstrap(n: Int, k: Int) -> Nil {
   let collector_subj = collector.start_and_get_subj()
-  list.range(0, n - 1)
-  |> list.each(fn(idx) {
-    let worker_subj = sum_worker.start_and_get_subj(collector_subj)
-    process.send(worker_subj, sum_worker.ComputeSum(idx, idx + k))
-  })
+
+  let worker_subj = sum_worker.start_and_get_subj(collector_subj)
+  let tasks_list: List(Int) = list.range(from: 1, to: n)
+  process.send(worker_subj, sum_worker.ComputeSum(tasks_list, n, k))
 
   let ps_list =
     actor.call(collector_subj, waiting: 10_000, sending: collector.Get)
