@@ -13,7 +13,7 @@ pub fn main() -> Nil {
       let #(n, k) = pair
       let before_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time())
-      runner.spawn_workers(n, k)
+      runner.bootstrap(n, k)
       let execution_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
       io.println("Execution Time: " <> float.to_string(execution_time))

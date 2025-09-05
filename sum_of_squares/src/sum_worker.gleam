@@ -22,20 +22,17 @@ fn handle_message(
   message: WorkerMessage,
 ) -> actor.Next(CollectorSubject, WorkerMessage) {
   case message {
-    ComputeSum(tasks_list, k) -> {
-      list.each(tasks_list, fn(n1: Int) {
+    ComputeSum(nums_list, k) -> {
+      list.each(nums_list, fn(n1: Int) {
         let squares_sum: Int =
           sum_of_squares(n1 + k - 1) - sum_of_squares(n1 - 1)
         let sqrt_value: Float = case int.square_root(squares_sum) {
           Ok(value) -> value
-          Error(_) -> -1.0
+          Error(_) -> 0.01
         }
-        case float.floor(sqrt_value) == sqrt_value {
-          True -> {
-            process.send(state, collector.Add(n1))
-          }
-          False -> Nil
-        }
+
+        let is_perfect_square: Bool = float.floor(sqrt_value) == sqrt_value
+        process.send(state, collector.Add(n1, is_perfect_square))
       })
       actor.continue(state)
     }
@@ -48,6 +45,9 @@ fn handle_message(
 fn sum_of_squares(n: Int) -> Int {
   { n * { n + 1 } * { 2 * n + 1 } / 6 }
 }
+
+pub type WorkerSubject =
+  Subject(WorkerMessage)
 
 pub type WorkerMessage {
   ComputeSum(List(Int), Int)

@@ -1,39 +1,22 @@
 import gleam/erlang/process.{type Subject}
-import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/otp/actor
 
-import collector
-import sum_worker
+import collector.{type CollectorSubject}
+import sum_worker.{type WorkerSubject}
 
-const tasks_per_worker = 1024
+const nums_per_worker: Int = 1024
 
-pub fn spawn_workers(n: Int, k: Int) -> Nil {
-  let waiting_subj = process.new_subject()
-  let collector_subj = collector.start_and_get_subj(waiting_subj)
+pub fn bootstrap(n: Int, k: Int) -> Nil {
+  let waiting_subj: Subject(Bool) = process.new_subject()
+  let collector_subj: CollectorSubject =
+    collector.start_and_get_subj(waiting_subj)
 
-  let total_workers: Int =
-    float.truncate(float.ceiling(
-      int.to_float(n) /. int.to_float(tasks_per_worker),
-    ))
+  spawn_workers(collector_subj, 1, n, n, k)
 
-  list.range(from: 1, to: total_workers)
-  |> list.each(fn(idx: Int) {
-    let worker_subj = sum_worker.start_and_get_subj(collector_subj)
-    let tasks_list: List(Int) =
-      list.range(
-        from: idx + { { idx - 1 } * tasks_per_worker },
-        to: int.min(n, idx * tasks_per_worker),
-      )
-    process.send(worker_subj, sum_worker.ComputeSum(tasks_list, k))
-  })
-
-  wait_till_completion(waiting_subj, total_workers)
-
-  let ps_list =
-    actor.call(collector_subj, waiting: 5000, sending: collector.Get)
+  wait_till_completion(waiting_subj, n)
+  let ps_list = process.call(collector_subj, 5000, collector.Get)
 
   case list.length(ps_list) {
     0 -> {
@@ -48,6 +31,32 @@ pub fn spawn_workers(n: Int, k: Int) -> Nil {
   }
 }
 
+fn spawn_workers(
+  collector_subj: CollectorSubject,
+  n1: Int,
+  n2: Int,
+  n: Int,
+  k: Int,
+) -> Nil {
+  case { n2 - n1 + 1 } <= nums_per_worker {
+    True -> {
+      let worker_subj: WorkerSubject =
+        sum_worker.start_and_get_subj(collector_subj)
+      let nums_list: List(Int) = list.range(from: n1, to: n2)
+      process.send(worker_subj, sum_worker.ComputeSum(nums_list, k))
+    }
+    False -> {
+      process.spawn(fn() {
+        spawn_workers(collector_subj, n1, n1 + nums_per_worker - 1, n, k)
+      })
+      process.spawn(fn() {
+        spawn_workers(collector_subj, n1 + nums_per_worker, n2, n, k)
+      })
+      Nil
+    }
+  }
+}
+
 fn wait_till_completion(waiting_subj: Subject(Bool), total_workers: Int) -> Nil {
   case process.receive(waiting_subj, within: 5000) {
     Ok(sent) -> sent
@@ -57,7 +66,7 @@ fn wait_till_completion(waiting_subj: Subject(Bool), total_workers: Int) -> Nil 
   case total_workers > 1 {
     True -> wait_till_completion(waiting_subj, total_workers - 1)
     False -> {
-      io.print("")
+      io.println("\nComputation completed")
     }
   }
 }

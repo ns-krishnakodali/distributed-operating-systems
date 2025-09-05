@@ -1,9 +1,7 @@
 import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
 
-pub fn start_and_get_subj(
-  waiting_subj: Subject(Bool),
-) -> Subject(CollectorMessage) {
+pub fn start_and_get_subj(waiting_subj: Subject(Bool)) -> CollectorSubject {
   let assert Ok(collector_actor) =
     actor.new(#(waiting_subj, []))
     |> actor.on_message(handle_message)
@@ -17,10 +15,13 @@ fn handle_message(
   message: CollectorMessage,
 ) -> actor.Next(#(Subject(Bool), List(Int)), CollectorMessage) {
   case message {
-    Add(v) -> {
+    Add(v, add_value) -> {
       let #(subject, collection) = state
-      let new_collection: List(Int) = [v, ..collection]
-      process.send(subject, True)
+      let new_collection: List(Int) = case add_value {
+        True -> [v, ..collection]
+        False -> collection
+      }
+      process.send(subject, add_value)
       actor.continue(#(subject, new_collection))
     }
     Get(reply) -> {
@@ -38,7 +39,7 @@ pub type CollectorSubject =
   Subject(CollectorMessage)
 
 pub type CollectorMessage {
-  Add(Int)
+  Add(Int, Bool)
   Get(Subject(List(Int)))
   Shutdown
 }
