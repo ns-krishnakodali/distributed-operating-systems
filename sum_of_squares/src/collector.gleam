@@ -1,7 +1,7 @@
 import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
 
-pub fn get_subject() -> Subject(CollectorMessage) {
+pub fn start_and_get_subj() -> Subject(CollectorMessage) {
   let assert Ok(collector_actor) =
     actor.new([])
     |> actor.on_message(handle_message)
@@ -28,6 +28,9 @@ fn handle_message(
     }
   }
 }
+
+pub type CollectorSubject =
+  Subject(CollectorMessage)
 
 pub type CollectorMessage {
   Add(Int)

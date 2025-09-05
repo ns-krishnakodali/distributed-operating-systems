@@ -3,11 +3,13 @@ import gleam/float
 import gleam/int
 import gleam/otp/actor
 
-import collector.{type CollectorMessage}
+import collector.{type CollectorSubject}
 
-pub fn get_subject() -> Subject(WorkerMessage) {
+pub fn start_and_get_subj(
+  collector_subj: CollectorSubject,
+) -> Subject(WorkerMessage) {
   let assert Ok(actor) =
-    actor.new(0)
+    actor.new(collector_subj)
     |> actor.on_message(handle_message)
     |> actor.start
 
@@ -15,11 +17,11 @@ pub fn get_subject() -> Subject(WorkerMessage) {
 }
 
 fn handle_message(
-  _: Int,
+  state: CollectorSubject,
   message: WorkerMessage,
-) -> actor.Next(Int, WorkerMessage) {
+) -> actor.Next(CollectorSubject, WorkerMessage) {
   case message {
-    ComputeSum(collector_subj, n1, n2) -> {
+    ComputeSum(n1, n2) -> {
       let squares_diff: Int = sum_of_squares(n2) - sum_of_squares(n1)
       let sqrt_value: Float = case
         float.square_root(int.to_float(squares_diff))
@@ -30,11 +32,11 @@ fn handle_message(
       let floored_sqrt = float.floor(sqrt_value)
       case floored_sqrt == sqrt_value {
         True -> {
-          process.send(collector_subj, collector.Add(n1 + 1))
+          process.send(state, collector.Add(n1 + 1))
         }
         False -> Nil
       }
-      actor.continue(0)
+      actor.continue(state)
     }
     Shutdown -> {
       actor.stop()
@@ -47,6 +49,6 @@ pub fn sum_of_squares(n: Int) -> Int {
 }
 
 pub type WorkerMessage {
-  ComputeSum(Subject(CollectorMessage), Int, Int)
+  ComputeSum(Int, Int)
   Shutdown
 }

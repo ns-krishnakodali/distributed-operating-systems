@@ -4,7 +4,7 @@ import gleam/io
 import gleam/string
 import gleam/time/timestamp
 
-import sum_supervisor
+import runner
 
 pub fn main() -> Nil {
   let line: String = get_line("Enter Inputs: \n")
@@ -15,7 +15,7 @@ pub fn main() -> Nil {
         True -> {
           let before_time: Float =
             timestamp.to_unix_seconds(timestamp.system_time())
-          sum_supervisor.bootstrap(n, k)
+          runner.bootstrap(n, k)
           let execution_time: Float =
             timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
           io.println("Execution Time: " <> float.to_string(execution_time))
