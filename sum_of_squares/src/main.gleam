@@ -30,7 +30,7 @@ fn get_line(prompt: String) -> String
 fn get_input_list(line: String) -> Result(#(Int, Int), String) {
   let inputs: List(String) = string.split(line, on: " ")
   case inputs {
-    [n_str, k_str] ->
+    ["lukas", n_str, k_str] ->
       case int.parse(n_str) {
         Ok(n) ->
           case int.parse(string.replace(k_str, each: "\n", with: "")) {

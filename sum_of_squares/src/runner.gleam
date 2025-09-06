@@ -23,8 +23,9 @@ pub fn bootstrap(n: Int, k: Int) -> Nil {
       io.println("No subsequences found for given inputs")
     }
     _ -> {
-      list.each(list.reverse(ps_list), fn(idx) {
-        io.print(int.to_string(idx) <> " ")
+      io.print("Numbers: ")
+      list.each(list.reverse(ps_list), fn(val) {
+        io.print(int.to_string(val) <> " ")
       })
       io.println("")
     }
@@ -66,7 +67,7 @@ fn wait_till_completion(waiting_subj: Subject(Bool), total_workers: Int) -> Nil 
   case total_workers > 1 {
     True -> wait_till_completion(waiting_subj, total_workers - 1)
     False -> {
-      io.println("\nComputation completed")
+      io.println("Computation completed")
     }
   }
 }
