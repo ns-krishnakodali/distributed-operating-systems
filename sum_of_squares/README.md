@@ -24,8 +24,25 @@ The program also prints its execution time, which reflects the actual runtime of
 
 ## Work Unit Size
 
-The chosen work unit size is **1024 sequences** per worker.
-This value was determined by testing various unit sizes and evaluating performance. Smaller work units introduced significant overhead, while larger work units reduced the ability to balance load effectively among workers. A unit size of 1024 was found to provide the best trade-off between task execution efficiency and parallelism.
+The chosen work unit size is **1024 sequences per worker**.  
+This value was determined by testing various unit sizes and evaluating performance.
+
+- Smaller work units introduced significant overhead.
+- Larger work units reduced the ability to balance load effectively among workers.
+- A unit size of **1024** provided the best trade-off between task execution efficiency and parallelism.
+
+### Performance Comparison
+
+| Work Unit Size | Real Time (s) | CPU Utilization |
+| -------------- | ------------- | --------------- |
+| 32             | 4.506         | 137%            |
+| 64             | 1.129         | 213%            |
+| 128            | 0.703         | 302%            |
+| 256            | 0.784         | 407%            |
+| 512            | 0.798         | 421%            |
+| 1024           | 0.814         | 476%            |
+| 2048           | 0.899         | 484%            |
+| 4096           | 0.964         | 485%            |
 
 ## Results
 
