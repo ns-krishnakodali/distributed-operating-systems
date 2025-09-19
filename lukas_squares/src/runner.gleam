@@ -16,7 +16,7 @@ pub fn bootstrap(n: Int, k: Int) -> Nil {
   spawn_workers(collector_subj, 1, n, n, k)
 
   wait_till_completion(waiting_subj, n)
-  let ps_list = process.call(collector_subj, 5000, collector.Get)
+  let ps_list: List(Int) = process.call(collector_subj, 5000, collector.Get)
 
   case list.length(ps_list) {
     0 -> {

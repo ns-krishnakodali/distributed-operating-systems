@@ -5,7 +5,9 @@ import gleam/list
 import gleam/string
 import gleam/time/timestamp
 
-const valid_topologies: List(String) = ["full", "3D", "line", "imp3D"]
+import protocol_handler
+
+const valid_topologies: List(String) = ["full", "3d", "line", "imp3d"]
 
 const valid_algorithms: List(String) = ["gossip", "push-sum"]
 
@@ -16,9 +18,7 @@ pub fn main() -> Nil {
       let #(num_nodes, topology, algorithm) = input_values
       let before_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time())
-      io.println("num_nodes: " <> int.to_string(num_nodes))
-      io.println("topology: " <> topology)
-      io.println("num_nodes: " <> algorithm)
+      protocol_handler.bootstrap(num_nodes, topology, algorithm)
       let execution_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
       io.println("Execution Time: " <> float.to_string(execution_time))
@@ -38,12 +38,13 @@ fn get_input_values(line: String) -> Result(#(Int, String, String), String) {
     [num_nodes, topology, algorithm] ->
       case int.parse(num_nodes) {
         Ok(num_nodes) -> {
-          case list.contains(valid_topologies, topology) {
+          let topology_lc: String = string.lowercase(topology)
+          case list.contains(valid_topologies, topology_lc) {
             True -> {
-              let n_algorithm: String =
-                string.replace(algorithm, each: "\n", with: "")
-              case list.contains(valid_algorithms, n_algorithm) {
-                True -> Ok(#(num_nodes, topology, n_algorithm))
+              let algorithm_nlc: String =
+                string.lowercase(string.replace(algorithm, each: "\n", with: ""))
+              case list.contains(valid_algorithms, algorithm_nlc) {
+                True -> Ok(#(num_nodes, topology_lc, algorithm_nlc))
                 False -> {
                   Error(
                     "Invalid algorithm, choose be one of '"

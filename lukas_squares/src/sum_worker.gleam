@@ -6,9 +6,7 @@ import gleam/otp/actor
 
 import collector.{type CollectorSubject}
 
-pub fn start_and_get_subj(
-  collector_subj: CollectorSubject,
-) -> Subject(WorkerMessage) {
+pub fn start_and_get_subj(collector_subj: CollectorSubject) -> WorkerSubject {
   let assert Ok(actor) =
     actor.new(collector_subj)
     |> actor.on_message(handle_message)
