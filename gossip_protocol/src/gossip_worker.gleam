@@ -21,14 +21,14 @@ fn handle_message(
 ) -> actor.Next(GossipWorkerState, GossipWorkerMessage) {
   case w_message {
     SendGossip(message, current_actor_subj, waiting_subj) -> {
-      let #(neighbor_data, _, w_rounds) = state
+      let #(neighbors_data, _, w_rounds) = state
       let updated_rounds: Int = case w_rounds < 10 {
         True -> {
           w_rounds + 1
         }
         False -> {
           list.each(
-            dict.values(neighbor_data),
+            dict.values(neighbors_data),
             fn(actor_subj: GossipWorkerSubject) {
               process.send(actor_subj, RemoveNeighbor(current_actor_subj))
             },
@@ -38,16 +38,16 @@ fn handle_message(
         }
       }
 
-      let random_neighbor_idx: Int = int.random(dict.size(neighbor_data)) + 1
+      let random_neighbor_idx: Int = int.random(dict.size(neighbors_data)) + 1
       let assert Ok(random_neighbor_subj) =
-        dict.get(neighbor_data, random_neighbor_idx)
+        dict.get(neighbors_data, random_neighbor_idx)
       process.send(
         random_neighbor_subj,
         SendGossip("gossip", random_neighbor_subj, waiting_subj),
       )
-      actor.continue(#(neighbor_data, message, updated_rounds))
+      actor.continue(#(neighbors_data, message, updated_rounds))
     }
-    UpdateNeighborsList(reply_subj, neighbors_map) -> {
+    UpdateGPNeighborsList(reply_subj, neighbors_map) -> {
       let #(_, message, rounds) = state
       process.send(reply_subj, Ok(True))
       actor.continue(#(neighbors_map, message, rounds))
@@ -91,7 +91,7 @@ pub type GossipWorkerSubject =
 
 pub type GossipWorkerMessage {
   SendGossip(String, GossipWorkerSubject, Subject(Bool))
-  UpdateNeighborsList(
+  UpdateGPNeighborsList(
     Subject(Result(Bool, Nil)),
     Dict(Int, GossipWorkerSubject),
   )
