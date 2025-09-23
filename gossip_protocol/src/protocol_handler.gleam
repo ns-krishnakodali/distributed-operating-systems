@@ -7,11 +7,9 @@ import gleam/list
 import gleam/time/timestamp
 import glearray.{type Array}
 
-import gossip_worker.{
-  type GossipWorkerSubject, SendGossip, UpdateGPNeighborsList,
-}
+import gossip_worker.{type GossipWorkerSubject, SendGossip, SetGPNeighborsData}
 import sum_worker.{
-  type SumWorkerSubject, GetAverage, SendSumValues, UpdatePSNeighborsList,
+  type SumWorkerSubject, GetAverage, SendSumValues, SetPSNeighborsData,
 }
 import utils.{
   type Algorithm, type Topology, Full, Gossip, Imp3D, Line, PushSum, ThreeD,
@@ -59,7 +57,7 @@ pub fn bootstrap(
             ),
           )
         let assert Ok(True) =
-          process.call(current_actor_subj, 100, UpdateGPNeighborsList(
+          process.call(current_actor_subj, 100, SetGPNeighborsData(
             _,
             neighbors_subj_map,
           ))
@@ -74,8 +72,14 @@ pub fn bootstrap(
 
       io.println("Starting gossip protocol")
       let assert Ok(actor_subj) = dict.get(gp_nodes_map, 1)
-      process.send(actor_subj, SendGossip("gossip", actor_subj, waiting_subj))
+      process.send(
+        actor_subj,
+        SendGossip("gossip_rumor", actor_subj, waiting_subj),
+      )
       wait_till_completion(waiting_subj, num_nodes)
+      list.each(dict.values(gp_nodes_map), fn(actor_subj: GossipWorkerSubject) {
+        process.send(actor_subj, gossip_worker.Shutdown)
+      })
     }
     PushSum -> {
       let ps_nodes_map: Dict(Int, SumWorkerSubject) =
@@ -107,12 +111,11 @@ pub fn bootstrap(
             ),
           )
         let assert Ok(True) =
-          process.call(current_actor_subj, 100, UpdatePSNeighborsList(
+          process.call(current_actor_subj, 100, SetPSNeighborsData(
             _,
             neighbors_subj_map,
           ))
       })
-
       let elapsed_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
       io.println(
@@ -129,9 +132,12 @@ pub fn bootstrap(
       wait_till_completion(waiting_subj, num_nodes)
       let assert Ok(average) = process.call(actor_subj, 50, GetAverage)
       io.println(
-        "Sum: "
+        "Total Sum: "
         <> int.to_string(float.round(average *. int.to_float(num_nodes))),
       )
+      list.each(dict.values(ps_nodes_map), fn(actor_subj: SumWorkerSubject) {
+        process.send(actor_subj, sum_worker.Shutdown)
+      })
     }
   }
 
@@ -170,7 +176,11 @@ fn get_neighbors_list(
     }
     ThreeD -> get_neighbors_3d_list(current_idx, num_nodes)
     Imp3D -> {
-      nodes_list
+      let neighbors_list: List(Int) =
+        get_neighbors_3d_list(current_idx, num_nodes)
+      let random_neighbor: Int =
+        random_valid_neighbor(neighbors_list, num_nodes)
+      list.append(neighbors_list, [random_neighbor])
     }
   }
 }
@@ -186,6 +196,14 @@ fn wait_till_completion(waiting_subj: Subject(Bool), total_workers: Int) -> Nil 
     False -> {
       io.println("Computation completed")
     }
+  }
+}
+
+fn random_valid_neighbor(neighbors_list: List(Int), num_nodes: Int) -> Int {
+  let random_number: Int = int.random(num_nodes) + 1
+  case list.contains(neighbors_list, random_number) {
+    True -> random_valid_neighbor(neighbors_list, num_nodes)
+    False -> random_number
   }
 }
 

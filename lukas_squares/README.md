@@ -1,5 +1,7 @@
 # Lukas Sequence Solver
 
+A parallel solver for finding subsequences in the Lukas sequence, optimized with adjustable work unit sizes for performance.
+
 ## Input Format
 
 To run the program, use the following format:

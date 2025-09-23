@@ -43,14 +43,14 @@ fn handle_message(
         dict.get(neighbors_data, random_neighbor_idx)
       process.send(
         random_neighbor_subj,
-        SendGossip("gossip", random_neighbor_subj, waiting_subj),
+        SendGossip("gossip_rumor", random_neighbor_subj, waiting_subj),
       )
       actor.continue(#(neighbors_data, message, updated_rounds))
     }
-    UpdateGPNeighborsList(reply_subj, neighbors_map) -> {
+    SetGPNeighborsData(reply_subj, neighbors_data) -> {
       let #(_, message, rounds) = state
       process.send(reply_subj, Ok(True))
-      actor.continue(#(neighbors_map, message, rounds))
+      actor.continue(#(neighbors_data, message, rounds))
     }
     RemoveNeighbor(neighbor_actor_subj) -> {
       let #(neighbors_data, message, rounds) = state
@@ -80,6 +80,9 @@ fn handle_message(
         }
       }
     }
+    Shutdown -> {
+      actor.stop()
+    }
   }
 }
 
@@ -91,9 +94,7 @@ pub type GossipWorkerSubject =
 
 pub type GossipWorkerMessage {
   SendGossip(String, GossipWorkerSubject, Subject(Bool))
-  UpdateGPNeighborsList(
-    Subject(Result(Bool, Nil)),
-    Dict(Int, GossipWorkerSubject),
-  )
+  SetGPNeighborsData(Subject(Result(Bool, Nil)), Dict(Int, GossipWorkerSubject))
   RemoveNeighbor(GossipWorkerSubject)
+  Shutdown
 }

@@ -5,6 +5,7 @@
 *.pdf
 *.swp
 *.swo
+*.png
 manifest.toml
 
 # Folders

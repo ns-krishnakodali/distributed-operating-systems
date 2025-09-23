@@ -77,10 +77,10 @@ fn handle_message(
         updated_rounds,
       ))
     }
-    UpdatePSNeighborsList(reply_subj, neighbors_map) -> {
+    SetPSNeighborsData(reply_subj, neighbors_data) -> {
       let #(_, sum, weight, rounds) = state
       process.send(reply_subj, Ok(True))
-      actor.continue(#(neighbors_map, sum, weight, rounds))
+      actor.continue(#(neighbors_data, sum, weight, rounds))
     }
     RemoveNeighbor(neighbor_actor_subj) -> {
       let #(neighbors_data, sum, weight, rounds) = state
@@ -115,6 +115,9 @@ fn handle_message(
       process.send(reply_subj, Ok(sum /. weight))
       actor.stop()
     }
+    Shutdown -> {
+      actor.stop()
+    }
   }
 }
 
@@ -126,7 +129,8 @@ pub type SumWorkerSubject =
 
 pub type SumWorkerMessage {
   SendSumValues(Float, Float, SumWorkerSubject, Subject(Bool))
-  UpdatePSNeighborsList(Subject(Result(Bool, Nil)), Dict(Int, SumWorkerSubject))
+  SetPSNeighborsData(Subject(Result(Bool, Nil)), Dict(Int, SumWorkerSubject))
   RemoveNeighbor(SumWorkerSubject)
   GetAverage(Subject(Result(Float, Nil)))
+  Shutdown
 }
