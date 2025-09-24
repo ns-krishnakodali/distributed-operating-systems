@@ -1,3 +1,4 @@
+import argv
 import gleam/float
 import gleam/int
 import gleam/io
@@ -13,13 +14,22 @@ const valid_topologies: List(String) = ["full", "3d", "line", "imp3d"]
 const valid_algorithms: List(String) = ["gossip", "push-sum"]
 
 pub fn main() -> Nil {
+  let drop_node_simulation: Bool = case argv.load().arguments {
+    ["drop_node"] -> True
+    _ -> False
+  }
   let line: String = get_line("Enter Inputs: \n")
   case get_input_values(line) {
     Ok(input_values) -> {
       let #(num_nodes, topology, algorithm) = input_values
       let before_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time())
-      protocol_handler.bootstrap(num_nodes, topology, algorithm)
+      protocol_handler.bootstrap(
+        num_nodes,
+        topology,
+        algorithm,
+        drop_node_simulation,
+      )
       let execution_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
       io.println("Execution Time: " <> float.to_string(execution_time))

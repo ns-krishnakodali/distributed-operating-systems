@@ -67,13 +67,21 @@ fn handle_message(
     }
     SetPSNeighborsData(reply_subj, neighbors_data) -> {
       let #(_, current_idx, sum, weight, rounds) = state
-      process.send(reply_subj, Ok(True))
+      process.send(reply_subj, True)
       actor.continue(#(neighbors_data, current_idx, sum, weight, rounds))
     }
-    RemoveNeighbor(neighbor_actor_subj) -> {
+    GetAverage(reply_subj) -> {
+      let #(_, _, sum, weight, _) = state
+      process.send(reply_subj, Ok(sum /. weight))
+      actor.continue(state)
+    }
+    RemoveNeighbor(reply_subj, neighbor_actor_subj) -> {
       let #(neighbors_data, current_idx, sum, weight, rounds) = state
       case dict.size(neighbors_data) == 1 {
-        True -> actor.continue(state)
+        True -> {
+          process.send(reply_subj, False)
+          actor.continue(state)
+        }
         False -> {
           let last_neighbors_idx: Int = dict.size(neighbors_data)
           let removed_neighbor: Dict(Int, SumWorkerSubject) =
@@ -94,14 +102,37 @@ fn handle_message(
               neighbors_data
             }
           }
+          process.send(reply_subj, True)
           actor.continue(#(mod_neighbors_data, current_idx, sum, weight, rounds))
         }
       }
     }
-    GetAverage(reply_subj) -> {
-      let #(_, _, sum, weight, _) = state
-      process.send(reply_subj, Ok(sum /. weight))
-      actor.continue(state)
+    DropNode(reply_subj, current_actor_subj, waiting_subj) -> {
+      let #(neighbors_data, _, _, _, _) = state
+      let all_nodes_dropped: Bool =
+        list.all(
+          list.map(dict.values(neighbors_data), fn(actor_subj) {
+            process.call(actor_subj, 50, RemoveNeighbor(_, current_actor_subj))
+          }),
+          fn(status: Bool) { status == True },
+        )
+      case all_nodes_dropped {
+        True -> {
+          let random_idx: Int = int.random(dict.size(neighbors_data)) + 1
+          let assert Ok(random_neighbor_subj) =
+            dict.get(neighbors_data, random_idx)
+          process.send(
+            random_neighbor_subj,
+            SendSumValues(0.0, 0.0, waiting_subj),
+          )
+          process.send(reply_subj, True)
+          actor.stop()
+        }
+        False -> {
+          process.send(reply_subj, False)
+          actor.continue(state)
+        }
+      }
     }
     Shutdown -> {
       actor.stop()
@@ -117,8 +148,9 @@ pub type SumWorkerSubject =
 
 pub type SumWorkerMessage {
   SendSumValues(Float, Float, Subject(Int))
-  SetPSNeighborsData(Subject(Result(Bool, Nil)), Dict(Int, SumWorkerSubject))
-  RemoveNeighbor(SumWorkerSubject)
+  SetPSNeighborsData(Subject(Bool), Dict(Int, SumWorkerSubject))
   GetAverage(Subject(Result(Float, Nil)))
+  RemoveNeighbor(Subject(Bool), SumWorkerSubject)
+  DropNode(Subject(Bool), SumWorkerSubject, Subject(Int))
   Shutdown
 }

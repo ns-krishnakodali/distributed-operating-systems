@@ -23,11 +23,17 @@ pub fn bootstrap(
   num_nodes: Int,
   topology: Topology,
   algorithm: Algorithm,
+  drop_node: Bool,
 ) -> Nil {
   let before_time: Float = timestamp.to_unix_seconds(timestamp.system_time())
 
   let waiting_subj: Subject(Int) = process.new_subject()
   let nodes_list: List(Int) = list.range(from: 1, to: num_nodes)
+
+  let updated_num_nodes: Int = case drop_node {
+    True -> num_nodes - 1
+    False -> num_nodes
+  }
 
   case algorithm {
     Gossip -> {
@@ -59,11 +65,19 @@ pub fn bootstrap(
               },
             ),
           )
-        let assert Ok(True) =
+
+        case
           process.call(current_actor_subj, 100, SetGPNeighborsData(
             _,
             neighbors_subj_map,
           ))
+        {
+          True -> Nil
+          False ->
+            io.print_error(
+              "Error setting neighbors for node: " <> int.to_string(idx),
+            )
+        }
       })
 
       let elapsed_time: Float =
@@ -76,12 +90,38 @@ pub fn bootstrap(
       io.println("Starting gossip protocol")
       let assert Ok(actor_subj) = dict.get(gp_nodes_map, 1)
       process.send(actor_subj, SendGossip("gossip_rumor", waiting_subj))
-      wait_till_completion(waiting_subj, set.new(), num_nodes)
+
+      case drop_node {
+        True -> {
+          io.println("Dropping node as argument provided")
+          let random_drop_idx: Int = int.random(num_nodes) + 1
+          let assert Ok(random_actor_subj) =
+            dict.get(gp_nodes_map, random_drop_idx)
+          let status: Bool =
+            process.call(random_actor_subj, 100, gossip_worker.DropNode(
+              _,
+              random_actor_subj,
+              waiting_subj,
+            ))
+          case status {
+            True ->
+              io.println(
+                "Node "
+                <> int.to_string(random_drop_idx)
+                <> " dropped successfully",
+              )
+            False -> io.print_error("Error when dropping node")
+          }
+        }
+        False -> Nil
+      }
+
+      wait_till_completion(waiting_subj, set.new(), updated_num_nodes)
       case topology {
         Full -> {
           let random_idx: Int = int.random(num_nodes) + 1
-          let assert Ok(last_actor_subj) = dict.get(gp_nodes_map, random_idx)
-          let rumor: String = process.call(last_actor_subj, 50, GetGossip)
+          let assert Ok(random_actor_subj) = dict.get(gp_nodes_map, random_idx)
+          let rumor: String = process.call(random_actor_subj, 50, GetGossip)
           io.println("Rumor gossiped: " <> rumor)
         }
         Line | ThreeD | Imp3D -> {
@@ -123,11 +163,18 @@ pub fn bootstrap(
               },
             ),
           )
-        let assert Ok(True) =
+        case
           process.call(current_actor_subj, 100, SetPSNeighborsData(
             _,
             neighbors_subj_map,
           ))
+        {
+          True -> Nil
+          False ->
+            io.print_error(
+              "Error setting neighbors for node: " <> int.to_string(idx),
+            )
+        }
       })
       let elapsed_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
@@ -139,7 +186,33 @@ pub fn bootstrap(
       io.println("Starting push-sum protocol")
       let assert Ok(actor_subj) = dict.get(ps_nodes_map, 1)
       process.send(actor_subj, SendSumValues(0.0, 0.0, waiting_subj))
-      wait_till_completion(waiting_subj, set.new(), num_nodes)
+
+      case drop_node {
+        True -> {
+          io.println("Dropping node as argument provided")
+          let random_drop_idx: Int = int.random(num_nodes) + 1
+          let assert Ok(random_actor_subj) =
+            dict.get(ps_nodes_map, random_drop_idx)
+          let status: Bool =
+            process.call(random_actor_subj, 100, sum_worker.DropNode(
+              _,
+              random_actor_subj,
+              waiting_subj,
+            ))
+          case status {
+            True ->
+              io.println(
+                "Node "
+                <> int.to_string(random_drop_idx)
+                <> " dropped successfully",
+              )
+            False -> io.print_error("Failed to drop node")
+          }
+        }
+        False -> Nil
+      }
+
+      wait_till_completion(waiting_subj, set.new(), updated_num_nodes)
       let assert Ok(average) = process.call(actor_subj, 50, GetAverage)
       io.println(
         "Total Sum: "

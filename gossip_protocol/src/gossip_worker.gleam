@@ -43,13 +43,21 @@ fn handle_message(
     }
     SetGPNeighborsData(reply_subj, neighbors_data) -> {
       let #(_, current_idx, message, rounds) = state
-      process.send(reply_subj, Ok(True))
+      process.send(reply_subj, True)
       actor.continue(#(neighbors_data, current_idx, message, rounds))
     }
-    RemoveNeighbor(neighbor_actor_subj) -> {
+    GetGossip(return_subj) -> {
+      let #(_, _, gossip, _) = state
+      process.send(return_subj, gossip)
+      actor.continue(state)
+    }
+    RemoveNeighbor(reply_subj, neighbor_actor_subj) -> {
       let #(neighbors_data, current_idx, message, rounds) = state
       case dict.size(neighbors_data) == 1 {
-        True -> actor.continue(state)
+        True -> {
+          process.send(reply_subj, False)
+          actor.continue(state)
+        }
         False -> {
           let last_neighbors_idx: Int = dict.size(neighbors_data)
           let removed_neighbor: Dict(Int, GossipWorkerSubject) =
@@ -70,14 +78,37 @@ fn handle_message(
               neighbors_data
             }
           }
+          process.send(reply_subj, True)
           actor.continue(#(mod_neighbors_data, current_idx, message, rounds))
         }
       }
     }
-    GetGossip(return_subj) -> {
-      let #(_, _, gossip, _) = state
-      process.send(return_subj, gossip)
-      actor.stop()
+    DropNode(reply_subj, current_actor_subj, waiting_subj) -> {
+      let #(neighbors_data, _, _, _) = state
+      let all_nodes_dropped: Bool =
+        list.all(
+          list.map(dict.values(neighbors_data), fn(actor_subj) {
+            process.call(actor_subj, 50, RemoveNeighbor(_, current_actor_subj))
+          }),
+          fn(status: Bool) { status == True },
+        )
+      case all_nodes_dropped {
+        True -> {
+          let random_idx: Int = int.random(dict.size(neighbors_data)) + 1
+          let assert Ok(random_neighbor_subj) =
+            dict.get(neighbors_data, random_idx)
+          process.send(
+            random_neighbor_subj,
+            SendGossip("gossip_rumor", waiting_subj),
+          )
+          process.send(reply_subj, True)
+          actor.stop()
+        }
+        False -> {
+          process.send(reply_subj, False)
+          actor.continue(state)
+        }
+      }
     }
     Shutdown -> {
       actor.stop()
@@ -93,8 +124,9 @@ pub type GossipWorkerSubject =
 
 pub type GossipWorkerMessage {
   SendGossip(String, Subject(Int))
-  SetGPNeighborsData(Subject(Result(Bool, Nil)), Dict(Int, GossipWorkerSubject))
-  RemoveNeighbor(GossipWorkerSubject)
+  SetGPNeighborsData(Subject(Bool), Dict(Int, GossipWorkerSubject))
   GetGossip(Subject(String))
+  RemoveNeighbor(Subject(Bool), GossipWorkerSubject)
+  DropNode(Subject(Bool), GossipWorkerSubject, Subject(Int))
   Shutdown
 }

@@ -8,15 +8,16 @@ To run the program, use the following format:
 
 ```
 
-num_nodes topology algorithm
+num_nodes topology algorithm drop_node
 
 ```
 
 Where:
 
-- `num_nodes` → number of actors in the network
-- `topology` → one of `full`, `3D`, `line`, or `imp3D`
-- `algorithm` → one of `gossip` or `push-sum`
+- `num_nodes`: number of actors in the network
+- `topology`: one of `full`, `3D`, `line`, or `imp3D`
+- `algorithm`: one of `gossip` or `push-sum`
+- `drop_node` _(optional)_: enables dropping/failing a node during simulation
 
 ### Examples
 
