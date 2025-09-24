@@ -4,10 +4,13 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/set
 import gleam/time/timestamp
 import glearray.{type Array}
 
-import gossip_worker.{type GossipWorkerSubject, SendGossip, SetGPNeighborsData}
+import gossip_worker.{
+  type GossipWorkerSubject, GetGossip, SendGossip, SetGPNeighborsData,
+}
 import sum_worker.{
   type SumWorkerSubject, GetAverage, SendSumValues, SetPSNeighborsData,
 }
@@ -23,7 +26,7 @@ pub fn bootstrap(
 ) -> Nil {
   let before_time: Float = timestamp.to_unix_seconds(timestamp.system_time())
 
-  let waiting_subj: Subject(Bool) = process.new_subject()
+  let waiting_subj: Subject(Int) = process.new_subject()
   let nodes_list: List(Int) = list.range(from: 1, to: num_nodes)
 
   case algorithm {
@@ -31,7 +34,7 @@ pub fn bootstrap(
       let gp_nodes_map: Dict(Int, GossipWorkerSubject) =
         dict.from_list(
           list.map(nodes_list, fn(idx: Int) {
-            #(idx, gossip_worker.start_gossip_worker())
+            #(idx, gossip_worker.start_gossip_worker(idx))
           }),
         )
       list.each(nodes_list, fn(idx: Int) {
@@ -72,11 +75,21 @@ pub fn bootstrap(
 
       io.println("Starting gossip protocol")
       let assert Ok(actor_subj) = dict.get(gp_nodes_map, 1)
-      process.send(
-        actor_subj,
-        SendGossip("gossip_rumor", actor_subj, waiting_subj),
-      )
-      wait_till_completion(waiting_subj, num_nodes)
+      process.send(actor_subj, SendGossip("gossip_rumor", waiting_subj))
+      wait_till_completion(waiting_subj, set.new(), num_nodes)
+      case topology {
+        Full -> {
+          let random_idx: Int = int.random(num_nodes) + 1
+          let assert Ok(last_actor_subj) = dict.get(gp_nodes_map, random_idx)
+          let rumor: String = process.call(last_actor_subj, 50, GetGossip)
+          io.println("Rumor gossiped: " <> rumor)
+        }
+        Line | ThreeD | Imp3D -> {
+          let assert Ok(last_actor_subj) = dict.get(gp_nodes_map, num_nodes)
+          let rumor: String = process.call(last_actor_subj, 50, GetGossip)
+          io.println("Rumor gossiped: " <> rumor)
+        }
+      }
       list.each(dict.values(gp_nodes_map), fn(actor_subj: GossipWorkerSubject) {
         process.send(actor_subj, gossip_worker.Shutdown)
       })
@@ -125,11 +138,8 @@ pub fn bootstrap(
 
       io.println("Starting push-sum protocol")
       let assert Ok(actor_subj) = dict.get(ps_nodes_map, 1)
-      process.send(
-        actor_subj,
-        SendSumValues(0.0, 0.0, actor_subj, waiting_subj),
-      )
-      wait_till_completion(waiting_subj, num_nodes)
+      process.send(actor_subj, SendSumValues(0.0, 0.0, waiting_subj))
+      wait_till_completion(waiting_subj, set.new(), num_nodes)
       let assert Ok(average) = process.call(actor_subj, 50, GetAverage)
       io.println(
         "Total Sum: "
@@ -152,6 +162,28 @@ pub fn bootstrap(
     <> float.to_string(convergence_time)
     <> "s",
   )
+}
+
+fn wait_till_completion(
+  waiting_subj: Subject(Int),
+  actors_data: set.Set(Int),
+  num_nodes: Int,
+) -> Nil {
+  let updated_actors_data: set.Set(Int) = case
+    process.receive(waiting_subj, within: 1000)
+  {
+    Ok(actor_idx) -> {
+      set.insert(actors_data, actor_idx)
+    }
+    Error(_) -> actors_data
+  }
+
+  case set.size(updated_actors_data) < num_nodes {
+    True -> wait_till_completion(waiting_subj, updated_actors_data, num_nodes)
+    False -> {
+      io.println("Computation completed")
+    }
+  }
 }
 
 fn get_neighbors_list(
@@ -181,20 +213,6 @@ fn get_neighbors_list(
       let random_neighbor: Int =
         random_valid_neighbor(neighbors_list, num_nodes)
       list.append(neighbors_list, [random_neighbor])
-    }
-  }
-}
-
-fn wait_till_completion(waiting_subj: Subject(Bool), total_workers: Int) -> Nil {
-  case process.receive(waiting_subj, within: 1000) {
-    Ok(sent) -> sent
-    Error(_) -> False
-  }
-
-  case total_workers > 1 {
-    True -> wait_till_completion(waiting_subj, total_workers - 1)
-    False -> {
-      io.println("Computation completed")
     }
   }
 }

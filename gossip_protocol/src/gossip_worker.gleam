@@ -4,11 +4,11 @@ import gleam/int
 import gleam/list
 import gleam/otp/actor
 
-pub fn start_gossip_worker() -> GossipWorkerSubject {
+pub fn start_gossip_worker(idx: Int) -> GossipWorkerSubject {
   let neighbors_dict: Dict(Int, GossipWorkerSubject) = dict.from_list([])
 
   let assert Ok(actor) =
-    actor.new(#(neighbors_dict, "", 0))
+    actor.new(#(neighbors_dict, idx, "", 0))
     |> actor.on_message(handle_message)
     |> actor.start
 
@@ -20,20 +20,14 @@ fn handle_message(
   w_message: GossipWorkerMessage,
 ) -> actor.Next(GossipWorkerState, GossipWorkerMessage) {
   case w_message {
-    SendGossip(message, current_actor_subj, waiting_subj) -> {
-      let #(neighbors_data, _, w_rounds) = state
+    SendGossip(message, waiting_subj) -> {
+      let #(neighbors_data, current_idx, _, w_rounds) = state
       let updated_rounds: Int = case w_rounds < 10 {
         True -> {
           w_rounds + 1
         }
         False -> {
-          list.each(
-            dict.values(neighbors_data),
-            fn(actor_subj: GossipWorkerSubject) {
-              process.send(actor_subj, RemoveNeighbor(current_actor_subj))
-            },
-          )
-          process.send(waiting_subj, True)
+          process.send(waiting_subj, current_idx)
           w_rounds
         }
       }
@@ -43,17 +37,17 @@ fn handle_message(
         dict.get(neighbors_data, random_neighbor_idx)
       process.send(
         random_neighbor_subj,
-        SendGossip("gossip_rumor", random_neighbor_subj, waiting_subj),
+        SendGossip("gossip_rumor", waiting_subj),
       )
-      actor.continue(#(neighbors_data, message, updated_rounds))
+      actor.continue(#(neighbors_data, current_idx, message, updated_rounds))
     }
     SetGPNeighborsData(reply_subj, neighbors_data) -> {
-      let #(_, message, rounds) = state
+      let #(_, current_idx, message, rounds) = state
       process.send(reply_subj, Ok(True))
-      actor.continue(#(neighbors_data, message, rounds))
+      actor.continue(#(neighbors_data, current_idx, message, rounds))
     }
     RemoveNeighbor(neighbor_actor_subj) -> {
-      let #(neighbors_data, message, rounds) = state
+      let #(neighbors_data, current_idx, message, rounds) = state
       case dict.size(neighbors_data) == 1 {
         True -> actor.continue(state)
         False -> {
@@ -76,9 +70,14 @@ fn handle_message(
               neighbors_data
             }
           }
-          actor.continue(#(mod_neighbors_data, message, rounds))
+          actor.continue(#(mod_neighbors_data, current_idx, message, rounds))
         }
       }
+    }
+    GetGossip(return_subj) -> {
+      let #(_, _, gossip, _) = state
+      process.send(return_subj, gossip)
+      actor.stop()
     }
     Shutdown -> {
       actor.stop()
@@ -87,14 +86,15 @@ fn handle_message(
 }
 
 pub type GossipWorkerState =
-  #(Dict(Int, GossipWorkerSubject), String, Int)
+  #(Dict(Int, GossipWorkerSubject), Int, String, Int)
 
 pub type GossipWorkerSubject =
   Subject(GossipWorkerMessage)
 
 pub type GossipWorkerMessage {
-  SendGossip(String, GossipWorkerSubject, Subject(Bool))
+  SendGossip(String, Subject(Int))
   SetGPNeighborsData(Subject(Result(Bool, Nil)), Dict(Int, GossipWorkerSubject))
   RemoveNeighbor(GossipWorkerSubject)
+  GetGossip(Subject(String))
   Shutdown
 }
