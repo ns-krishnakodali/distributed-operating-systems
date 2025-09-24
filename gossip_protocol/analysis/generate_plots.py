@@ -159,8 +159,100 @@ def plot_combined():
     plt.close()
 
 
+def plot_combined_drop_node():
+    # Gossip - drop_node
+    plt.figure(figsize=(8, 5))
+    plt.plot(
+        [10, 50, 100, 300, 500, 1000, 1500, 2000, 3000],
+        [
+            0.004797220230102539,
+            0.006671428680419922,
+            0.009639739990234375,
+            0.04434990882873535,
+            0.08796191215515137,
+            0.2953829765319824,
+            0.6957592964172363,
+            1.2874376773834229,
+            2.732028007507324,
+        ],
+        marker="o",
+        label="Full",
+    )
+    plt.plot(
+        [8, 27, 64, 125, 216, 343, 512, 729, 1000, 8000, 27000, 64000, 125000],
+        [
+            0.004522800445556641,
+            0.0051233768463134766,
+            0.005992412567138672,
+            0.009889602661132812,
+            0.014169454574584961,
+            0.015228748321533203,
+            0.023041725158691406,
+            0.04324674606323242,
+            0.06926178932189941,
+            0.4586145877838135,
+            1.4730684757232666,
+            4.735389471054077,
+            27.672972440719604,
+        ],
+        marker="o",
+        label="3D Grid",
+    )
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("Number of Nodes")
+    plt.ylabel("Convergence Time (s)")
+    plt.title("Gossip Protocol - drop_node (Full & 3D Only)")
+    plt.grid(True, which="both", ls="--")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("gossip_drop_node.png")
+    plt.close()
+
+    # Push-Sum - drop_node
+    plt.figure(figsize=(8, 5))
+    plt.plot(
+        [10, 50, 100, 300, 500, 1000, 2000, 3000],
+        [
+            0.005030393600463867,
+            0.007773160934448242,
+            0.014117240905761719,
+            0.06003713607788086,
+            0.1116185188293457,
+            0.3664395809173584,
+            1.431227684020996,
+            3.4247829914093018,
+        ],
+        marker="s",
+        label="Full",
+    )
+    plt.plot(
+        [125, 512, 1000, 3375, 8000],
+        [
+            0.03658175468444824,
+            0.327683687210083,
+            0.8208818435668945,
+            6.775849103927612,
+            30.90833830833435,
+        ],
+        marker="s",
+        label="3D Grid",
+    )
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("Number of Nodes")
+    plt.ylabel("Convergence Time (s)")
+    plt.title("Push-Sum Protocol - drop_node (Full & 3D Only)")
+    plt.grid(True, which="both", ls="--")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig("pushsum_drop_node.png")
+    plt.close()
+
+
 def main():
-    plot_combined()
+    # plot_combined()
+    plot_combined_drop_node()
 
 
 if __name__ == "__main__":

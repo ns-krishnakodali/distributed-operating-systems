@@ -98,7 +98,7 @@ pub fn bootstrap(
           let assert Ok(random_actor_subj) =
             dict.get(gp_nodes_map, random_drop_idx)
           let status: Bool =
-            process.call(random_actor_subj, 100, gossip_worker.DropNode(
+            process.call(random_actor_subj, 1000, gossip_worker.DropNode(
               _,
               random_actor_subj,
               waiting_subj,
@@ -194,7 +194,7 @@ pub fn bootstrap(
           let assert Ok(random_actor_subj) =
             dict.get(ps_nodes_map, random_drop_idx)
           let status: Bool =
-            process.call(random_actor_subj, 100, sum_worker.DropNode(
+            process.call(random_actor_subj, 1000, sum_worker.DropNode(
               _,
               random_actor_subj,
               waiting_subj,
