@@ -26,6 +26,7 @@ Where:
 100 full gossip
 5000 line push-sum
 8000 imp3D gossip
+1000 3D push-sum drop_node
 
 ```
 
