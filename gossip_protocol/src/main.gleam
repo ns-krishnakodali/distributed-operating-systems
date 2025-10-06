@@ -19,7 +19,7 @@ pub fn main() -> Nil {
     _ -> False
   }
   let line: String = get_line("Enter Inputs: \n")
-  case get_input_values(line) {
+  case parse_input_line(line) {
     Ok(input_values) -> {
       let #(num_nodes, topology, algorithm) = input_values
       let before_time: Float =
@@ -43,7 +43,7 @@ pub fn main() -> Nil {
 @external(erlang, "io", "get_line")
 fn get_line(prompt: String) -> String
 
-fn get_input_values(line: String) -> Result(#(Int, Topology, Algorithm), String) {
+fn parse_input_line(line: String) -> Result(#(Int, Topology, Algorithm), String) {
   let inputs: List(String) = string.split(line, on: " ")
   case inputs {
     [num_nodes, topology, algorithm] ->

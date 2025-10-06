@@ -8,7 +8,7 @@ import runner
 
 pub fn main() -> Nil {
   let line: String = get_line("Enter Inputs: \n")
-  case get_input_values(line) {
+  case parse_input_line(line) {
     Ok(pair) -> {
       let #(n, k) = pair
       let before_time: Float =
@@ -27,7 +27,7 @@ pub fn main() -> Nil {
 @external(erlang, "io", "get_line")
 fn get_line(prompt: String) -> String
 
-fn get_input_values(line: String) -> Result(#(Int, Int), String) {
+fn parse_input_line(line: String) -> Result(#(Int, Int), String) {
   let inputs: List(String) = string.split(line, on: " ")
   case inputs {
     ["lukas", n_str, k_str] ->

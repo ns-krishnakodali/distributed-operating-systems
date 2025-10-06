@@ -251,7 +251,7 @@ def plot_combined_drop_node():
 
 
 def main():
-    # plot_combined()
+    plot_combined()
     plot_combined_drop_node()
 
 
