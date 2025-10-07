@@ -6,10 +6,8 @@ A simulator for Gossip and Push-Sum protocols using the actor model in Gleam, su
 
 To run the program, use the following format:
 
-```
-
+```text
 num_nodes topology algorithm drop_node
-
 ```
 
 Where:
@@ -21,13 +19,11 @@ Where:
 
 ### Examples
 
-```
-
+```text
 100 full gossip
 5000 line push-sum
 8000 imp3D gossip
 1000 3D push-sum drop_node
-
 ```
 
 The program will build the specified topology, bootstrap the chosen algorithm, and measure the convergence time.

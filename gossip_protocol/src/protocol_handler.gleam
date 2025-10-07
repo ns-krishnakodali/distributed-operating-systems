@@ -40,7 +40,7 @@ pub fn bootstrap(
       let gp_nodes_map: Dict(Int, GossipWorkerSubject) =
         dict.from_list(
           list.map(nodes_list, fn(idx: Int) {
-            #(idx, gossip_worker.start_gossip_worker(idx))
+            #(idx, gossip_worker.start_and_get_subj(idx))
           }),
         )
       list.each(nodes_list, fn(idx: Int) {
@@ -138,7 +138,7 @@ pub fn bootstrap(
       let ps_nodes_map: Dict(Int, SumWorkerSubject) =
         dict.from_list(
           list.map(nodes_list, fn(idx: Int) {
-            #(idx, sum_worker.start_sum_worker(idx))
+            #(idx, sum_worker.start_and_get_subj(idx))
           }),
         )
       list.each(nodes_list, fn(idx: Int) {

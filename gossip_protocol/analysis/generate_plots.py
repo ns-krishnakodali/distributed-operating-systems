@@ -1,5 +1,5 @@
 """
-The data used below is obtained by running the `run analysis` scripts
+The data below is obtained by running the `run analysis` scripts
 """
 
 import matplotlib.pyplot as plt

@@ -5,7 +5,7 @@ import gleam/int
 import gleam/list
 import gleam/otp/actor
 
-pub fn start_sum_worker(idx: Int) -> SumWorkerSubject {
+pub fn start_and_get_subj(idx: Int) -> SumWorkerSubject {
   let neighbors_dict: Dict(Int, SumWorkerSubject) = dict.from_list([])
 
   let assert Ok(actor) =

@@ -4,7 +4,7 @@ import gleam/int
 import gleam/list
 import gleam/otp/actor
 
-pub fn start_gossip_worker(idx: Int) -> GossipWorkerSubject {
+pub fn start_and_get_subj(idx: Int) -> GossipWorkerSubject {
   let neighbors_dict: Dict(Int, GossipWorkerSubject) = dict.from_list([])
 
   let assert Ok(actor) =
