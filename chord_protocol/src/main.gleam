@@ -5,19 +5,21 @@ import gleam/io
 import gleam/string
 import gleam/time/timestamp
 
+import protocol_handler
+
 pub fn main() -> Nil {
-  let _drop_node_simulation: Bool = case argv.load().arguments {
+  let drop_node: Bool = case argv.load().arguments {
     ["drop_node"] -> True
     _ -> False
   }
   let line: String = get_line("Enter Inputs: \n")
   case parse_input_line(line) {
     Ok(values) -> {
-      let #(_nn, _nr) = values
-      let before_time: Float =
-        timestamp.to_unix_seconds(timestamp.system_time())
+      let #(nn, nr) = values
+      let start_time: Float = timestamp.to_unix_seconds(timestamp.system_time())
+      protocol_handler.bootstrap(nn, nr, drop_node)
       let execution_time: Float =
-        timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
+        timestamp.to_unix_seconds(timestamp.system_time()) -. start_time
       io.println("Execution Time: " <> float.to_string(execution_time))
     }
     Error(msg) -> {
@@ -34,11 +36,18 @@ fn parse_input_line(line: String) -> Result(#(Int, Int), String) {
   case inputs {
     [num_nodes, num_requests] -> {
       case int.parse(num_nodes) {
-        Ok(nn) ->
-          case int.parse(string.replace(num_requests, each: "\n", with: "")) {
-            Ok(nr) -> Ok(#(nn, nr))
-            Error(_) -> Error("num_requests must be a valid integer")
+        Ok(nn) -> {
+          case nn >= 2 {
+            True ->
+              case
+                int.parse(string.replace(num_requests, each: "\n", with: ""))
+              {
+                Ok(nr) -> Ok(#(nn, nr))
+                Error(_) -> Error("num_requests must be a valid integer")
+              }
+            False -> Error("num_requests must be greater than 1")
           }
+        }
         Error(_) -> Error("num_nodes must be a valid integer")
       }
     }
