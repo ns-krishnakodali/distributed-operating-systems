@@ -11,8 +11,8 @@ This repository contains exercises and projects for the course **Distributed Ope
 3. [Creating a New Project](#creating-a-new-project)
 4. [Building and Running Projects](#building-and-running-projects)
 5. [Testing](#testing)
-6. [Adding Packages](#adding-packages)
-7. [Measuring Execution Time](#measuring-execution-time)
+6. [Adding/Removing Packages](#addingremoving-packages)
+7. [Measuring Execution Time (MacOS)](#measuring-execution-time-macos)
 
 ---
 
