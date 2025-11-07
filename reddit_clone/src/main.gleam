@@ -3,6 +3,7 @@ import gleam/int
 import gleam/io
 import gleam/string
 import gleam/time/timestamp
+import reddit_simulation
 
 pub fn main() -> Nil {
   let line: String = get_line("Simulation Inputs: \n")
@@ -10,7 +11,9 @@ pub fn main() -> Nil {
     Ok(num_users) -> {
       let before_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time())
-      io.println("Number of users: " <> int.to_string(num_users))
+
+      reddit_simulation.bootstrap_simulation(num_users)
+
       let execution_time: Float =
         timestamp.to_unix_seconds(timestamp.system_time()) -. before_time
       io.println("Execution Time: " <> float.to_string(execution_time))

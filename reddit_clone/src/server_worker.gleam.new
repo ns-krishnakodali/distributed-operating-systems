@@ -1,0 +1,165 @@
+import gleam/dict.{type Dict}
+import gleam/erlang/process.{type Subject}
+import gleam/otp/actor
+import gleam/set.{type Set}
+
+import logging
+
+pub fn start_and_get_subj() -> ServerWorkerSubject {
+  let user_state: UsersState = dict.new()
+  let user_messages_state: Dict(String, UserMessagesState) = dict.new()
+  let user_profile_state: Dict(String, UserProfileState) = dict.new()
+  let subreddit_state: Dict(String, SubRedditState) = dict.new()
+  let post_state: Dict(String, PostState) = dict.new()
+  let comment_state: Dict(String, CommentState) = dict.new()
+
+  let assert Ok(actor) =
+    actor.new(#(
+      user_state,
+      user_profile_state,
+      user_messages_state,
+      subreddit_state,
+      post_state,
+      comment_state,
+    ))
+    |> actor.on_message(handle_message)
+    |> actor.start
+
+  actor.data
+}
+
+fn handle_message(
+  state: ServerWorkerState,
+  s_message: ServerWorkerMessage,
+) -> actor.Next(ServerWorkerState, ServerWorkerMessage) {
+  case s_message {
+    SignUpUser(username, password) -> {
+      let #(users_state, user_profile_state, ums, srs, ps, cs): ServerWorkerState =
+        state
+
+      let #(updated_users_state, updated_user_profile_state): #(
+        UsersState,
+        Dict(String, UserProfileState),
+      ) = case dict.has_key(users_state, username) {
+        True -> {
+          logging.error("Username " <> username <> "already exists")
+          #(users_state, user_profile_state)
+        }
+        False -> {
+          logging.info("Signing up user " <> username)
+          #(
+            dict.insert(users_state, username, password),
+            dict.insert(user_profile_state, username, #(
+              set.new(),
+              set.new(),
+              set.new(),
+              0,
+            )),
+          )
+        }
+      }
+
+      actor.continue(#(
+        updated_users_state,
+        updated_user_profile_state,
+        ums,
+        srs,
+        ps,
+        cs,
+      ))
+    }
+    CreateSubReddit(subreddit_name, created_username) -> {
+      let #(users_state, user_profile_state, ums, subreddits_state, ps, cs): ServerWorkerState =
+        state
+
+      let #(updated_subreddits_state, updated_user_profile_state) = case
+        dict.has_key(users_state, created_username)
+      {
+        True -> {
+          case dict.has_key(subreddits_state, subreddit_name) {
+            False -> {
+              logging.info("Creating SubReddit " <> subreddit_name)
+              
+              // Get current user profile or create new one if not exists
+              let current_user_profile = case dict.get(user_profile_state, created_username) {
+                Ok(profile) -> profile
+                Error(_) -> #(set.new(), set.new(), set.new(), 0)
+              }
+              
+              let #(current_subreddits, posts, comments, karma) = current_user_profile
+              
+              // Add new subreddit to user's profile
+              let updated_user_profile = #(
+                set.insert(current_subreddits, subreddit_name),
+                posts,
+                comments,
+                karma
+              )
+              
+              #(
+                dict.insert(subreddits_state, subreddit_name, #(set.new(), created_username)),
+                dict.insert(user_profile_state, created_username, updated_user_profile)
+              )
+            }
+            True -> {
+              logging.error("SubReddit " <> subreddit_name <> " already exists")
+              #(subreddits_state, user_profile_state)
+            }
+          }
+        }
+        False -> {
+          logging.error("Username " <> created_username <> " not found")
+          #(subreddits_state, user_profile_state)
+        }
+      }
+
+      actor.continue(#(users_state, updated_user_profile_state, ums, updated_subreddits_state, ps, cs))
+    }
+    Shutdown -> {
+      actor.stop()
+    }
+  }
+}
+
+// username -> password
+type UsersState =
+  Dict(String, String)
+
+// subreddit_names_set, post_ids_set, commedi_ids_set, karma
+type UserProfileState =
+  #(Set(String), Set(String), Set(String), Int)
+
+// list(username, message)
+type UserMessagesState =
+  List(#(String, String))
+
+// post_ids_set, created_username
+type SubRedditState =
+  #(Set(String), String)
+
+// subreddit_name, created_username, post_description, upvotes, downvotes 
+type PostState =
+  #(String, String, String, Int, Int)
+
+// post_id, parent_comment_id, commented_username, comment, upvotes, downvotes
+type CommentState =
+  #(String, String, String, String, Int, Int)
+
+pub type ServerWorkerState =
+  #(
+    UsersState,
+    Dict(String, UserProfileState),
+    Dict(String, UserMessagesState),
+    Dict(String, SubRedditState),
+    Dict(String, PostState),
+    Dict(String, CommentState),
+  )
+
+pub type ServerWorkerSubject =
+  Subject(ServerWorkerMessage)
+
+pub type ServerWorkerMessage {
+  SignUpUser(String, String)
+  CreateSubReddit(String, String)
+  Shutdown
+}
