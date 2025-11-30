@@ -13,8 +13,8 @@ pub fn start_and_get_subj() -> ServerWorkerSubject {
   let user_state: UsersState = dict.new()
   let user_messages_state: Dict(String, UserMessagesState) = dict.new()
   let user_profiles_state: Dict(String, UserProfileState) = dict.new()
-  let subreddit_state: Dict(String, SubRedditState) = dict.new()
-  let post_state: Dict(String, PostState) = dict.new()
+  let subreddits_state: Dict(String, SubRedditState) = dict.new()
+  let posts_state: Dict(String, PostState) = dict.new()
   let comment_state: Dict(String, CommentState) = dict.new()
 
   let assert Ok(actor) =
@@ -22,8 +22,8 @@ pub fn start_and_get_subj() -> ServerWorkerSubject {
       user_state,
       user_profiles_state,
       user_messages_state,
-      subreddit_state,
-      post_state,
+      subreddits_state,
+      posts_state,
       comment_state,
     ))
     |> actor.on_message(handle_message)
@@ -48,11 +48,10 @@ fn handle_message(
           actor.continue(state)
         }
         False -> {
-          logging.info("Signing up user " <> username)
           process.send(reply_subj, True)
 
           actor.continue(#(
-            dict.insert(users_state, username, password),
+            dict.insert(users_state, username, #(password, True)),
             dict.insert(user_profiles_state, username, #(
               set.new(),
               set.new(),
@@ -69,7 +68,7 @@ fn handle_message(
         }
       }
     }
-    CreateSubReddit(reply_subj, subreddit_name, created_username) -> {
+    CreateSubReddit(reply_subj, subreddit_name, created_username, rank) -> {
       let #(users_state, user_profiles_state, ums, subreddits_state, ps, cs): ServerWorkerState =
         state
 
@@ -89,7 +88,7 @@ fn handle_message(
                   user_profiles_state,
                   subreddit_name,
                   created_username,
-                  False,
+                  True,
                 )
               {
                 Ok(updated_user_profile) -> {
@@ -106,6 +105,8 @@ fn handle_message(
                     dict.insert(subreddits_state, subreddit_name, #(
                       created_username,
                       set.new(),
+                      1,
+                      rank,
                     )),
                     ps,
                     cs,
@@ -145,10 +146,12 @@ fn handle_message(
                   user_profiles_state,
                   subreddit_name,
                   username,
-                  False,
+                  True,
                 )
               {
                 Ok(updated_user_profile) -> {
+                  let assert Ok(#(cu, pis, subscribers, rank)) =
+                    dict.get(subreddits_state, subreddit_name)
                   process.send(reply_subj, True)
 
                   actor.continue(#(
@@ -159,7 +162,12 @@ fn handle_message(
                       updated_user_profile,
                     ),
                     ums,
-                    subreddits_state,
+                    dict.insert(subreddits_state, subreddit_name, #(
+                      cu,
+                      pis,
+                      subscribers + 1,
+                      rank,
+                    )),
                     ps,
                     cs,
                   ))
@@ -204,10 +212,12 @@ fn handle_message(
                   user_profiles_state,
                   subreddit_name,
                   username,
-                  True,
+                  False,
                 )
               {
                 Ok(updated_user_state) -> {
+                  let assert Ok(#(cu, pis, subscribers, rank)) =
+                    dict.get(subreddits_state, subreddit_name)
                   process.send(reply_subj, True)
 
                   actor.continue(#(
@@ -218,7 +228,12 @@ fn handle_message(
                       updated_user_state,
                     ),
                     ums,
-                    subreddits_state,
+                    dict.insert(subreddits_state, subreddit_name, #(
+                      cu,
+                      pis,
+                      subscribers - 1,
+                      rank,
+                    )),
                     ps,
                     cs,
                   ))
@@ -268,7 +283,7 @@ fn handle_message(
                 <> subreddit_name,
               )
 
-              let post_id: String = utils.generate_random_string(10, "")
+              let post_id: String = utils.generate_hex_string(10, "")
               case
                 update_user_profile_posts(
                   user_profiles_state,
@@ -277,6 +292,8 @@ fn handle_message(
                 )
               {
                 Ok(updated_user_profile) -> {
+                  let assert Ok(#(cu, post_ids_set, subscribers, rank)) =
+                    dict.get(subreddits_state, subreddit_name)
                   process.send(reply_subj, True)
 
                   actor.continue(#(
@@ -287,7 +304,12 @@ fn handle_message(
                       updated_user_profile,
                     ),
                     ums,
-                    subreddits_state,
+                    dict.insert(subreddits_state, subreddit_name, #(
+                      cu,
+                      set.insert(post_ids_set, post_id),
+                      subscribers,
+                      rank,
+                    )),
                     dict.insert(posts_state, post_id, #(
                       subreddit_name,
                       username,
@@ -350,8 +372,7 @@ fn handle_message(
                 <> post_id,
               )
 
-              let comment_id: String = utils.generate_random_string(10, "")
-
+              let comment_id: String = utils.generate_hex_string(10, "")
               case
                 update_user_profile_comments(
                   user_profiles_state,
@@ -360,14 +381,6 @@ fn handle_message(
                 )
               {
                 Ok(updated_user_profile) -> {
-                  let updated_post_state: PostState = #(
-                    srn,
-                    cu,
-                    pd,
-                    set.insert(comment_ids_set, comment_id),
-                    uv,
-                    dv,
-                  )
                   process.send(reply_subj, True)
 
                   actor.continue(#(
@@ -379,7 +392,14 @@ fn handle_message(
                     ),
                     ums,
                     srs,
-                    dict.insert(posts_state, post_id, updated_post_state),
+                    dict.insert(posts_state, post_id, #(
+                      srn,
+                      cu,
+                      pd,
+                      set.insert(comment_ids_set, comment_id),
+                      uv,
+                      dv,
+                    )),
                     dict.insert(comments_state, comment_id, #(
                       post_id,
                       parent_comment_id,
@@ -694,6 +714,23 @@ fn handle_message(
         }
       }
     }
+    GetSubRedditsFeed(reply_subj) -> {
+      let subreddits_state = state.3
+      let subreddits_feed =
+        dict.to_list(
+          dict.map_values(
+            subreddits_state,
+            fn(_: String, subreddit_state: SubRedditState) {
+              let #(_, _, _, rank) = subreddit_state
+              rank
+            },
+          ),
+        )
+
+      process.send(reply_subj, subreddits_feed)
+
+      actor.continue(state)
+    }
     Shutdown -> {
       actor.stop()
     }
@@ -705,17 +742,19 @@ fn update_user_profile_subreddits(
   user_profiles_state: Dict(String, UserProfileState),
   subreddit_name: String,
   username: String,
-  remove_sr: Bool,
+  add_sr: Bool,
 ) -> UserProfileStateResult {
   case dict.get(user_profiles_state, username) {
     Ok(#(subreddit_names_set, pis, cid, mis, uk, os)) -> {
       case set.contains(subreddit_names_set, subreddit_name) {
         True ->
-          Error("Subreddit already exists in " <> username <> "'s profile")
+          Error(
+            "User " <> username <> " alredy joined subreddit " <> subreddit_name,
+          )
         False -> {
-          let updated_subreddits_set: Set(String) = case remove_sr {
-            True -> set.delete(subreddit_names_set, subreddit_name)
-            False -> set.insert(subreddit_names_set, subreddit_name)
+          let updated_subreddits_set: Set(String) = case add_sr {
+            True -> set.insert(subreddit_names_set, subreddit_name)
+            False -> set.delete(subreddit_names_set, subreddit_name)
           }
           Ok(#(updated_subreddits_set, pis, cid, mis, uk, os))
         }
@@ -822,9 +861,9 @@ fn update_user_message_ids(
 pub type DirectMessage =
   #(String, String, String, Float)
 
-// username -> password
+// username -> password, online_status
 pub type UsersState =
-  Dict(String, String)
+  Dict(String, #(String, Bool))
 
 // subreddit_names_set, post_ids_set, comment_ids_set, message_ids_set, user_karma, online_status
 pub type UserProfileState =
@@ -834,9 +873,9 @@ pub type UserProfileState =
 pub type UserMessagesState =
   List(DirectMessage)
 
-// post_ids_set, created_username
+// created_username, post_ids_set, subscribers, rank
 pub type SubRedditState =
-  #(String, Set(String))
+  #(String, Set(String), Int, Int)
 
 // subreddit_name, created_username, post_description, comment_ids_set, upvotes, downvotes
 pub type PostState =
@@ -864,7 +903,7 @@ pub type ServerWorkerSubject =
 
 pub type ServerWorkerMessage {
   SignUpUser(Subject(Bool), String, String)
-  CreateSubReddit(Subject(Bool), String, String)
+  CreateSubReddit(Subject(Bool), String, String, Int)
   JoinSubReddit(Subject(Bool), String, String)
   LeaveSubReddit(Subject(Bool), String, String)
   PostInSubReddit(Subject(Bool), String, String, String)
@@ -874,5 +913,6 @@ pub type ServerWorkerMessage {
   UpVoteComment(Subject(Bool), String)
   DownVoteComment(Subject(Bool), String)
   DirectMessage(Subject(Bool), String, String, String)
+  GetSubRedditsFeed(Subject(List(#(String, Int))))
   Shutdown
 }

@@ -3,10 +3,12 @@ import gleam/int
 import gleam/io
 import gleam/string
 import gleam/time/timestamp
+
 import reddit_simulation
 
 pub fn main() -> Nil {
-  let line: String = get_line("Simulation Inputs: \n")
+  let line: String =
+    get_line("Enter number of users for simulation (min 100): \n")
   case parse_input_line(line) {
     Ok(num_users) -> {
       let before_time: Float =
@@ -32,7 +34,13 @@ fn parse_input_line(line: String) -> Result(Int, String) {
   case input {
     [num_users] -> {
       case int.parse(string.replace(num_users, each: "\n", with: "")) {
-        Ok(num_users) -> Ok(num_users)
+        Ok(num_users) -> {
+          case num_users >= 100 {
+            True -> Ok(num_users)
+            False -> Error("Number of users must be at least 100")
+          }
+        }
+
         Error(_) -> Error("Number of users must be a valid integer")
       }
     }
