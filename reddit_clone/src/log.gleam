@@ -1,6 +1,6 @@
 import gleam/io
 
-pub fn log_heading(heading: String) -> Nil {
+pub fn heading(heading: String) -> Nil {
   io.println("========== " <> heading <> " ==========")
 }
 

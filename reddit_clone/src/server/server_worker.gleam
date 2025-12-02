@@ -6,7 +6,7 @@ import gleam/set.{type Set}
 import gleam/string
 import gleam/time/timestamp
 
-import logging
+import log
 import utils
 
 pub fn start_and_get_subj() -> ServerWorkerSubject {
@@ -42,7 +42,7 @@ fn handle_message(
         state
       case dict.has_key(users_state, username) {
         True -> {
-          logging.error("Username " <> username <> " already exists")
+          log.error("Username " <> username <> " already exists")
           process.send(reply_subj, False)
 
           actor.continue(state)
@@ -58,7 +58,6 @@ fn handle_message(
               set.new(),
               set.new(),
               0,
-              False,
             )),
             ums,
             srs,
@@ -68,21 +67,80 @@ fn handle_message(
         }
       }
     }
-    CreateSubReddit(reply_subj, subreddit_name, created_username, rank) -> {
-      let #(users_state, user_profiles_state, ums, subreddits_state, ps, cs): ServerWorkerState =
-        state
+    LogInUser(reply_subj, username, password) -> {
+      let #(users_state, ups, ums, srs, ps, cs): ServerWorkerState = state
 
-      case dict.has_key(users_state, created_username) {
-        True -> {
-          case dict.has_key(subreddits_state, subreddit_name) {
+      case dict.get(users_state, username) {
+        Ok(#(u_password, online_status)) ->
+          case u_password == password && !online_status {
             True -> {
-              logging.error("SubReddit " <> subreddit_name <> " already exists")
+              process.send(reply_subj, True)
+
+              actor.continue(#(
+                dict.insert(users_state, username, #(u_password, True)),
+                ups,
+                ums,
+                srs,
+                ps,
+                cs,
+              ))
+            }
+            False -> {
+              log.warning("User " <> username <> " is already online")
               process.send(reply_subj, False)
 
               actor.continue(state)
             }
+          }
+        Error(_) -> {
+          log.warning("Username " <> username <> " does not exist")
+          process.send(reply_subj, False)
+
+          actor.continue(state)
+        }
+      }
+    }
+    SignOutUser(reply_subj, username, password) -> {
+      let #(users_state, ups, ums, srs, ps, cs): ServerWorkerState = state
+
+      case dict.get(users_state, username) {
+        Ok(#(u_password, online_status)) ->
+          case u_password == password && online_status {
+            True -> {
+              process.send(reply_subj, True)
+
+              actor.continue(#(
+                dict.insert(users_state, username, #(u_password, False)),
+                ups,
+                ums,
+                srs,
+                ps,
+                cs,
+              ))
+            }
             False -> {
-              logging.info("Creating SubReddit " <> subreddit_name)
+              log.warning("User " <> username <> " is already offline")
+              process.send(reply_subj, False)
+
+              actor.continue(state)
+            }
+          }
+        Error(_) -> {
+          log.warning("Username " <> username <> " does not exist")
+          process.send(reply_subj, False)
+
+          actor.continue(state)
+        }
+      }
+    }
+    CreateSubReddit(reply_subj, subreddit_name, created_username, rank) -> {
+      let #(users_state, user_profiles_state, ums, subreddits_state, ps, cs): ServerWorkerState =
+        state
+
+      case is_user_online(users_state, created_username) {
+        True -> {
+          case !dict.has_key(subreddits_state, subreddit_name) {
+            True -> {
               case
                 update_user_profile_subreddits(
                   user_profiles_state,
@@ -113,32 +171,54 @@ fn handle_message(
                   ))
                 }
                 Error(err) -> {
-                  logging.error(err)
+                  log.error(err)
                   process.send(reply_subj, False)
 
                   actor.continue(state)
                 }
               }
             }
+            False -> {
+              log.error("SubReddit " <> subreddit_name <> " already exists")
+              process.send(reply_subj, False)
+
+              actor.continue(state)
+            }
           }
         }
         False -> {
-          logging.error("Username " <> created_username <> " not found")
+          log.error("Username " <> created_username <> " unavailable")
           process.send(reply_subj, False)
 
           actor.continue(state)
         }
       }
     }
+    GetSubRedditsFeed(reply_subj) -> {
+      let subreddits_state = state.3
+      let subreddits_feed: List(#(String, Int)) =
+        dict.to_list(
+          dict.map_values(
+            subreddits_state,
+            fn(_: String, subreddit_state: SubRedditState) {
+              let #(_, _, _, rank) = subreddit_state
+              rank
+            },
+          ),
+        )
+      process.send(reply_subj, subreddits_feed)
+
+      actor.continue(state)
+    }
     JoinSubReddit(reply_subj, subreddit_name, username) -> {
       let #(users_state, user_profiles_state, ums, subreddits_state, ps, cs): ServerWorkerState =
         state
 
-      case dict.has_key(users_state, username) {
+      case is_user_online(users_state, username) {
         True -> {
           case dict.has_key(subreddits_state, subreddit_name) {
             True -> {
-              logging.info(
+              log.info(
                 "User " <> username <> " joining SubReddit " <> subreddit_name,
               )
               case
@@ -174,14 +254,14 @@ fn handle_message(
                 }
                 Error(err) -> {
                   process.send(reply_subj, False)
-                  logging.error(err)
+                  log.error(err)
 
                   actor.continue(state)
                 }
               }
             }
             False -> {
-              logging.error("SubReddit " <> subreddit_name <> " not found")
+              log.error("SubReddit " <> subreddit_name <> " not found")
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -189,7 +269,7 @@ fn handle_message(
           }
         }
         False -> {
-          logging.error("Username " <> username <> " not found")
+          log.error("Username " <> username <> " unavailable")
           process.send(reply_subj, False)
 
           actor.continue(state)
@@ -200,11 +280,11 @@ fn handle_message(
       let #(users_state, user_profiles_state, ums, subreddits_state, ps, cs): ServerWorkerState =
         state
 
-      case dict.has_key(users_state, username) {
+      case is_user_online(users_state, username) {
         True -> {
           case dict.has_key(subreddits_state, subreddit_name) {
             True -> {
-              logging.info(
+              log.info(
                 "User " <> username <> " leaving SubReddit " <> subreddit_name,
               )
               case
@@ -239,7 +319,7 @@ fn handle_message(
                   ))
                 }
                 Error(err) -> {
-                  logging.error(err)
+                  log.error(err)
                   process.send(reply_subj, False)
 
                   actor.continue(state)
@@ -247,7 +327,7 @@ fn handle_message(
               }
             }
             False -> {
-              logging.error("SubReddit " <> subreddit_name <> " not found")
+              log.error("SubReddit " <> subreddit_name <> " not found")
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -255,7 +335,7 @@ fn handle_message(
           }
         }
         False -> {
-          logging.error("Username " <> username <> " not found")
+          log.error("Username " <> username <> " unavailable")
           process.send(reply_subj, False)
 
           actor.continue(state)
@@ -272,11 +352,11 @@ fn handle_message(
         cs,
       ): ServerWorkerState = state
 
-      case dict.has_key(users_state, username) {
+      case is_user_online(users_state, username) {
         True -> {
           case dict.has_key(subreddits_state, subreddit_name) {
             True -> {
-              logging.info(
+              log.info(
                 "User "
                 <> username
                 <> " posting in SubReddit "
@@ -322,7 +402,7 @@ fn handle_message(
                   ))
                 }
                 Error(err) -> {
-                  logging.error(err)
+                  log.error(err)
                   process.send(reply_subj, False)
 
                   actor.continue(state)
@@ -330,7 +410,7 @@ fn handle_message(
               }
             }
             False -> {
-              logging.error("SubReddit " <> subreddit_name <> " not found")
+              log.error("SubReddit " <> subreddit_name <> " not found")
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -338,7 +418,7 @@ fn handle_message(
           }
         }
         False -> {
-          logging.error("Username " <> username <> " not found")
+          log.error("Username " <> username <> " unavailable")
           process.send(reply_subj, False)
 
           actor.continue(state)
@@ -361,11 +441,11 @@ fn handle_message(
         comments_state,
       ): ServerWorkerState = state
 
-      case dict.has_key(users_state, commented_username) {
+      case is_user_online(users_state, commented_username) {
         True -> {
           case dict.get(posts_state, post_id) {
             Ok(#(srn, cu, pd, comment_ids_set, uv, dv)) -> {
-              logging.info(
+              log.info(
                 "User "
                 <> commented_username
                 <> " commenting on post "
@@ -411,7 +491,7 @@ fn handle_message(
                   ))
                 }
                 Error(err) -> {
-                  logging.error(err)
+                  log.error(err)
                   process.send(reply_subj, False)
 
                   actor.continue(state)
@@ -421,7 +501,7 @@ fn handle_message(
               actor.continue(state)
             }
             Error(_) -> {
-              logging.error("Post " <> post_id <> " does not exist")
+              log.error("Post " <> post_id <> " does not exist")
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -429,7 +509,7 @@ fn handle_message(
           }
         }
         False -> {
-          logging.error("Username " <> commented_username <> " not found")
+          log.error("Username " <> commented_username <> " unavailable")
           process.send(reply_subj, False)
 
           actor.continue(state)
@@ -471,7 +551,7 @@ fn handle_message(
               ))
             }
             Error(err) -> {
-              logging.error(err)
+              log.error(err)
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -479,7 +559,7 @@ fn handle_message(
           }
         }
         Error(_) -> {
-          logging.error("Post " <> post_id <> " not found")
+          log.error("Post " <> post_id <> " not found")
           actor.continue(state)
         }
       }
@@ -519,7 +599,7 @@ fn handle_message(
               ))
             }
             Error(err) -> {
-              logging.error(err)
+              log.error(err)
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -527,7 +607,7 @@ fn handle_message(
           }
         }
         Error(_) -> {
-          logging.error("Post " <> post_id <> " not found")
+          log.error("Post " <> post_id <> " not found")
           actor.continue(state)
         }
       }
@@ -571,7 +651,7 @@ fn handle_message(
               ))
             }
             Error(err) -> {
-              logging.error(err)
+              log.error(err)
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -579,7 +659,7 @@ fn handle_message(
           }
         }
         Error(_) -> {
-          logging.error("Comment " <> comment_id <> " not found")
+          log.error("Comment " <> comment_id <> " not found")
           actor.continue(state)
         }
       }
@@ -623,7 +703,7 @@ fn handle_message(
               ))
             }
             Error(err) -> {
-              logging.error(err)
+              log.error(err)
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -631,17 +711,17 @@ fn handle_message(
           }
         }
         Error(_) -> {
-          logging.error("Comment " <> comment_id <> " not found")
+          log.error("Comment " <> comment_id <> " not found")
           actor.continue(state)
         }
       }
     }
-    DirectMessage(reply_subj, sender_username, receiver_username, message) -> {
+    MessageUser(reply_subj, sender_username, receiver_username, message) -> {
       let #(users_state, user_profiles_state, user_messages_state, srs, ps, cs) =
         state
       case
-        dict.has_key(users_state, sender_username)
-        && dict.has_key(users_state, receiver_username)
+        is_user_online(users_state, sender_username)
+        && is_user_online(users_state, receiver_username)
       {
         True -> {
           // Order sender and receiver usernames lexicographically to obtain id for users chat
@@ -693,7 +773,7 @@ fn handle_message(
               ))
             }
             Error(err) -> {
-              logging.error(err)
+              log.error(err)
               process.send(reply_subj, False)
 
               actor.continue(state)
@@ -701,7 +781,7 @@ fn handle_message(
           }
         }
         False -> {
-          logging.error(
+          log.error(
             "Cannot find user names {"
             <> sender_username
             <> ", "
@@ -714,23 +794,6 @@ fn handle_message(
         }
       }
     }
-    GetSubRedditsFeed(reply_subj) -> {
-      let subreddits_state = state.3
-      let subreddits_feed =
-        dict.to_list(
-          dict.map_values(
-            subreddits_state,
-            fn(_: String, subreddit_state: SubRedditState) {
-              let #(_, _, _, rank) = subreddit_state
-              rank
-            },
-          ),
-        )
-
-      process.send(reply_subj, subreddits_feed)
-
-      actor.continue(state)
-    }
     Shutdown -> {
       actor.stop()
     }
@@ -738,6 +801,13 @@ fn handle_message(
 }
 
 // Helper functions
+fn is_user_online(users_state: UsersState, username: String) -> Bool {
+  case dict.get(users_state, username) {
+    Ok(#(_up, online_status)) -> online_status
+    Error(_) -> False
+  }
+}
+
 fn update_user_profile_subreddits(
   user_profiles_state: Dict(String, UserProfileState),
   subreddit_name: String,
@@ -745,7 +815,7 @@ fn update_user_profile_subreddits(
   add_sr: Bool,
 ) -> UserProfileStateResult {
   case dict.get(user_profiles_state, username) {
-    Ok(#(subreddit_names_set, pis, cid, mis, uk, os)) -> {
+    Ok(#(subreddit_names_set, pis, cid, mis, uk)) -> {
       case set.contains(subreddit_names_set, subreddit_name) {
         True ->
           Error(
@@ -756,7 +826,7 @@ fn update_user_profile_subreddits(
             True -> set.insert(subreddit_names_set, subreddit_name)
             False -> set.delete(subreddit_names_set, subreddit_name)
           }
-          Ok(#(updated_subreddits_set, pis, cid, mis, uk, os))
+          Ok(#(updated_subreddits_set, pis, cid, mis, uk))
         }
       }
     }
@@ -772,8 +842,8 @@ fn update_user_profile_posts(
   username: String,
 ) -> UserProfileStateResult {
   case dict.get(user_profiles_state, username) {
-    Ok(#(srs, post_ids_set, cid, mis, uk, os)) ->
-      Ok(#(srs, set.insert(post_ids_set, post_id), cid, mis, uk, os))
+    Ok(#(srs, post_ids_set, cid, mis, uk)) ->
+      Ok(#(srs, set.insert(post_ids_set, post_id), cid, mis, uk))
     Error(_) -> {
       Error("Error updating post ids for user " <> username <> " profile")
     }
@@ -786,11 +856,11 @@ fn update_user_profile_comments(
   username: String,
 ) -> UserProfileStateResult {
   case dict.get(user_profiles_state, username) {
-    Ok(#(sns, pis, comment_ids_set, mis, uk, os)) -> {
+    Ok(#(sns, pis, comment_ids_set, mis, uk)) -> {
       case set.contains(comment_ids_set, comment_id) {
         True -> Error("Comment ID " <> comment_id <> " already exists")
         False ->
-          Ok(#(sns, pis, set.insert(comment_ids_set, comment_id), mis, uk, os))
+          Ok(#(sns, pis, set.insert(comment_ids_set, comment_id), mis, uk))
       }
     }
     Error(_) -> {
@@ -805,8 +875,8 @@ fn update_user_profile_karma(
   karma: Int,
 ) -> UserProfileStateResult {
   case dict.get(user_profiles_state, username) {
-    Ok(#(srs, pis, cid, mis, user_karma, os)) ->
-      Ok(#(srs, pis, cid, mis, user_karma + karma, os))
+    Ok(#(srs, pis, cid, mis, user_karma)) ->
+      Ok(#(srs, pis, cid, mis, user_karma + karma))
     Error(_) -> {
       Error("Error updating karma for user " <> username)
     }
@@ -823,8 +893,8 @@ fn update_user_message_ids(
     dict.get(user_profiles_state, username1),
     dict.get(user_profiles_state, username2)
   {
-    Ok(#(srs1, pis1, cid1, message_ids_set1, uk1, os1)),
-      Ok(#(srs2, pis2, cid2, message_ids_set2, uk2, os2))
+    Ok(#(srs1, pis1, cid1, message_ids_set1, uk1)),
+      Ok(#(srs2, pis2, cid2, message_ids_set2, uk2))
     -> {
       Ok(
         user_profiles_state
@@ -834,7 +904,6 @@ fn update_user_message_ids(
           cid1,
           set.insert(message_ids_set1, user_messages_id),
           uk1,
-          os1,
         ))
         |> dict.insert(username2, #(
           srs2,
@@ -842,7 +911,6 @@ fn update_user_message_ids(
           cid2,
           set.insert(message_ids_set2, user_messages_id),
           uk2,
-          os2,
         )),
       )
     }
@@ -865,9 +933,9 @@ pub type DirectMessage =
 pub type UsersState =
   Dict(String, #(String, Bool))
 
-// subreddit_names_set, post_ids_set, comment_ids_set, message_ids_set, user_karma, online_status
+// subreddit_names_set, post_ids_set, comment_ids_set, message_ids_set
 pub type UserProfileState =
-  #(Set(String), Set(String), Set(String), Set(String), Int, Bool)
+  #(Set(String), Set(String), Set(String), Set(String), Int)
 
 // list(username, message)
 pub type UserMessagesState =
@@ -903,7 +971,10 @@ pub type ServerWorkerSubject =
 
 pub type ServerWorkerMessage {
   SignUpUser(Subject(Bool), String, String)
+  LogInUser(Subject(Bool), String, String)
+  SignOutUser(Subject(Bool), String, String)
   CreateSubReddit(Subject(Bool), String, String, Int)
+  GetSubRedditsFeed(Subject(List(#(String, Int))))
   JoinSubReddit(Subject(Bool), String, String)
   LeaveSubReddit(Subject(Bool), String, String)
   PostInSubReddit(Subject(Bool), String, String, String)
@@ -912,7 +983,6 @@ pub type ServerWorkerMessage {
   DownVotePost(Subject(Bool), String)
   UpVoteComment(Subject(Bool), String)
   DownVoteComment(Subject(Bool), String)
-  DirectMessage(Subject(Bool), String, String, String)
-  GetSubRedditsFeed(Subject(List(#(String, Int))))
+  MessageUser(Subject(Bool), String, String, String)
   Shutdown
 }
