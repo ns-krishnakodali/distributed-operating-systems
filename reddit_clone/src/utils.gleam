@@ -37,3 +37,8 @@ pub fn zipf_weight(rank: Int) {
   let assert Ok(rank) = float.power(int.to_float(rank), 1.2)
   1.0 /. rank
 }
+
+// Get a randomly generated boolean value
+pub fn random_boolean() -> Bool {
+  int.random(2) + 1 == 1
+}

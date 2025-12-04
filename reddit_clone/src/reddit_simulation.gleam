@@ -52,7 +52,9 @@ pub fn bootstrap(num_users: Int) -> Nil {
   )
 
   log.heading("Simulalting user actions")
-  spawn_action_simulations()
+  process.spawn(spawn_action_simulations)
+
+  Nil
 }
 
 // Signup <num_users> for simulation
@@ -545,87 +547,110 @@ fn simulate_actions(choice: Option(Int)) -> Nil {
           // Interactive actions
           log.info("Performing interactive actions")
 
-          let random_subreddit_info: Result(SubRedditInfo, Nil) =
-            get_random_subreddit()
-          case random_subreddit_info {
-            Ok(subreddit_info) -> {
-              let subreddit_name: String = subreddit_info.0
+          case utils.random_boolean() {
+            True -> {
+              let random_subreddit_info: Result(SubRedditInfo, Nil) =
+                get_random_subreddit()
+              case random_subreddit_info {
+                Ok(subreddit_info) -> {
+                  let subreddit_name: String = subreddit_info.0
 
-              // Post in SubReddit
-              process.spawn(fn() {
-                log.info("Action: Posting in SubReddit")
-
-                let random_username: String = get_random_active_username()
-                let payload: String =
-                  json.object([
-                    #("name", string(subreddit_name)),
-                    #("username", string(random_username)),
-                    #(
-                      "post_description",
-                      string(utils.post_description <> " in " <> subreddit_name),
-                    ),
-                  ])
-                  |> json.to_string
-                let _ =
-                  http_client.post(base_url <> "/post-subreddit", payload, [])
-              })
-
-              // Upvote / Downvote Posts
-              let posts_feed: Array(PostInfo) =
-                glearray.from_list(get_posts(Some(subreddit_name)))
-              case glearray.length(posts_feed) > 0 {
-                True -> {
+                  // Post in SubReddit
                   process.spawn(fn() {
-                    log.info("Action: Voting a Post")
+                    log.info("Action: Posting in SubReddit")
 
-                    list.each(
-                      list.range(
-                        0,
-                        int.random(int.min(
-                          min_pc_interaction,
-                          glearray.length(posts_feed),
-                        )),
-                      ),
-                      fn(idx: Int) {
-                        case glearray.get(posts_feed, idx) {
-                          Ok(post_info) ->
-                            vote_post(post_info.1, int.random(2) + 1 == 1)
-                          Error(_) -> simulate_actions(Some(action_choice))
-                        }
-                      },
-                    )
+                    let random_username: String = get_random_active_username()
+                    let payload: String =
+                      json.object([
+                        #("name", string(subreddit_name)),
+                        #("username", string(random_username)),
+                        #(
+                          "post_description",
+                          string(
+                            utils.post_description <> " in " <> subreddit_name,
+                          ),
+                        ),
+                      ])
+                      |> json.to_string
+                    let _ =
+                      http_client.post(
+                        base_url <> "/post-subreddit",
+                        payload,
+                        [],
+                      )
                   })
+
+                  // Upvote / Downvote Posts
+                  let posts_feed: Array(PostInfo) =
+                    glearray.from_list(get_posts(Some(subreddit_name)))
+                  case glearray.length(posts_feed) > 0 {
+                    True -> {
+                      process.spawn(fn() {
+                        log.info("Action: Voting a Post")
+
+                        list.each(
+                          list.range(
+                            0,
+                            int.random(int.min(
+                              min_pc_interaction,
+                              glearray.length(posts_feed),
+                            )),
+                          ),
+                          fn(idx: Int) {
+                            case glearray.get(posts_feed, idx) {
+                              Ok(post_info) ->
+                                vote_post(post_info.1, utils.random_boolean())
+                              Error(_) -> simulate_actions(Some(action_choice))
+                            }
+                          },
+                        )
+                      })
+                      Nil
+                    }
+                    False -> Nil
+                  }
                   Nil
                 }
-                False -> Nil
+                Error(_) -> simulate_actions(Some(action_choice))
               }
-
-              // Commment on Post
+            }
+            False -> {
+              // Commment on Posts
               process.spawn(fn() {
                 log.info("Action: Commenting on Post")
 
                 let random_username: String = get_random_active_username()
-                case
-                  glearray.get(
-                    posts_feed,
-                    int.random(glearray.length(posts_feed)),
-                  )
-                {
-                  Ok(post_info) -> {
-                    let post_id: String = post_info.1
-                    let comments: Array(CommentInfo) =
-                      glearray.from_list(get_post_comments(post_id))
+                let posts_feed: Array(PostInfo) =
+                  glearray.from_list(get_posts(None))
 
-                    case glearray.length(comments) > 0 {
-                      True -> {
+                list.each(
+                  list.range(
+                    0,
+                    int.random(int.min(
+                      min_pc_interaction,
+                      glearray.length(posts_feed),
+                    )),
+                  ),
+                  fn(post_idx: Int) {
+                    case glearray.get(posts_feed, post_idx) {
+                      Ok(post_info) -> {
+                        let post_id: String = post_info.1
+                        let comments: Array(CommentInfo) =
+                          glearray.from_list(get_post_comments(post_id))
                         let parent_comment_id: String = case
-                          glearray.get(
-                            comments,
-                            int.random(glearray.length(comments)),
-                          )
+                          utils.random_boolean()
                         {
-                          Ok(comment_info) -> comment_info.1
-                          Error(_) -> ""
+                          True ->
+                            case
+                              glearray.get(
+                                comments,
+                                int.random(glearray.length(comments)),
+                              )
+                            {
+                              Ok(comment_info) -> comment_info.1
+                              Error(_) -> ""
+                            }
+                          False -> ""
                         }
 
                         let payload: String =
@@ -647,43 +672,62 @@ fn simulate_actions(choice: Option(Int)) -> Nil {
                             payload,
                             [],
                           )
-
-                        // Upvote / Downvote Comments
-                        process.spawn(fn() {
-                          log.info("Action: Voting a Comment")
-
-                          list.each(
-                            list.range(
-                              0,
-                              int.random(int.min(
-                                min_pc_interaction,
-                                glearray.length(comments),
-                              )),
-                            ),
-                            fn(idx: Int) {
-                              case glearray.get(comments, idx) {
-                                Ok(comment_info) ->
-                                  vote_comment(
-                                    comment_info.1,
-                                    int.random(2) + 1 == 1,
-                                  )
-                                Error(_) -> Nil
-                              }
-                            },
-                          )
-                        })
                         Nil
                       }
-                      False -> Nil
+                      Error(_) -> Nil
                     }
-                  }
-                  Error(_) -> simulate_actions(Some(action_choice))
-                }
+                  },
+                )
               })
 
+              // Upvote / Downvote Comments
+              process.spawn(fn() {
+                log.info("Action: Voting a Comment")
+
+                let posts_info: List(PostInfo) = get_posts(None)
+                let posts_comments_feed: Array(PostInfo) =
+                  glearray.from_list(
+                    list.filter(posts_info, fn(post_info: PostInfo) {
+                      !list.is_empty(post_info.3)
+                    }),
+                  )
+
+                case glearray.length(posts_comments_feed) > 0 {
+                  True ->
+                    case
+                      glearray.get(
+                        posts_comments_feed,
+                        int.random(glearray.length(posts_comments_feed)),
+                      )
+                    {
+                      Ok(post_info) -> {
+                        let comments: Array(String) =
+                          glearray.from_list(post_info.3)
+
+                        list.each(
+                          list.range(
+                            0,
+                            int.random(int.min(
+                              min_pc_interaction,
+                              glearray.length(comments),
+                            )),
+                          ),
+                          fn(idx: Int) {
+                            case glearray.get(comments, idx) {
+                              Ok(comment_id) ->
+                                vote_comment(comment_id, utils.random_boolean())
+                              Error(_) -> log.error("Error in voting comment")
+                            }
+                          },
+                        )
+                      }
+                      Error(_) -> simulate_actions(Some(action_choice))
+                    }
+                  False -> Nil
+                }
+              })
               Nil
             }
-            Error(_) -> simulate_actions(Some(action_choice))
           }
         }
       }
@@ -695,7 +739,7 @@ fn spawn_action_simulations() -> Nil {
   process.spawn(fn() { simulate_actions(None) })
 
   // Sleep 100ms-200ms to prevent server overload
-  process.sleep(int.random(100) + 100)
+  process.sleep(int.random(50) + 50)
   spawn_action_simulations()
 }
 

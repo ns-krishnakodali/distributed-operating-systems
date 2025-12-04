@@ -9,11 +9,13 @@ import server/server_worker.{
   type CommentInfo, type PostInfo, type ServerWorkerSubject, type SubRedditInfo,
   type UserInfo, type UserMessageInfo,
 }
+import server/statistics_worker.{type StatisticsWorkerSubject}
 import server/web
 
 pub fn handle_request(
   request: Request,
   server_subj: ServerWorkerSubject,
+  statistics_subj: StatisticsWorkerSubject,
 ) -> Response {
   use request <- web.middleware(request)
 
@@ -21,9 +23,18 @@ pub fn handle_request(
     // Server health endpoint.
     [] -> health(request)
     // Auth endpoints
-    ["login"] -> login_user(request, server_subj)
-    ["sign-up"] -> sign_up_user(request, server_subj)
-    ["sign-out"] -> sign_out_user(request, server_subj)
+    ["login"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementAuthentications)
+      login_user(request, server_subj)
+    }
+    ["sign-up"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementAuthentications)
+      sign_up_user(request, server_subj)
+    }
+    ["sign-out"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementAuthentications)
+      sign_out_user(request, server_subj)
+    }
 
     // User endpoints
     ["active-users"] -> get_users(request, server_subj, True)
@@ -33,32 +44,59 @@ pub fn handle_request(
     ["user-posts", username] -> get_user_posts(request, server_subj, username)
 
     // SubReddit endpoints
-    ["create-subreddit"] -> create_subreddit(request, server_subj)
+    ["create-subreddit"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementSubReddits)
+      create_subreddit(request, server_subj)
+    }
     ["subreddits"] -> get_subreddits(request, server_subj)
-    ["join-subreddit"] -> join_subreddit(request, server_subj)
-    ["leave-subreddit"] -> leave_subreddit(request, server_subj)
+    ["join-subreddit"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementSubscriptions)
+      join_subreddit(request, server_subj)
+    }
+    ["leave-subreddit"] -> {
+      process.send(statistics_subj, statistics_worker.DecrementSubscriptions)
+      leave_subreddit(request, server_subj)
+    }
 
     // Post endpoints
-    ["post-subreddit"] -> post_subreddit(request, server_subj)
+    ["post-subreddit"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementPosts)
+      post_subreddit(request, server_subj)
+    }
     ["subreddit-posts", subreddit_name] ->
       get_subreddit_posts(request, server_subj, subreddit_name)
     ["posts"] -> get_posts(request, server_subj)
-    ["download-post"] -> download_post(request, server_subj)
-    ["upvote-post", post_id] -> vote_post(request, server_subj, post_id, True)
-    ["downvote-post", post_id] ->
+    ["download-post"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementPostDownloads)
+      download_post(request, server_subj)
+    }
+    ["upvote-post", post_id] -> {
+      process.send(statistics_subj, statistics_worker.IncrementPostUpvotes)
+      vote_post(request, server_subj, post_id, True)
+    }
+    ["downvote-post", post_id] -> {
+      process.send(statistics_subj, statistics_worker.IncrementPostDownvotes)
       vote_post(request, server_subj, post_id, False)
+    }
 
     // Comment endpoints
     ["comment-post"] -> comment_post(request, server_subj)
     ["post-comments", post_id] ->
       get_post_comments(request, server_subj, post_id)
-    ["upvote-comment", post_id] ->
-      vote_comment(request, server_subj, post_id, True)
-    ["downvote-comment", post_id] ->
-      vote_comment(request, server_subj, post_id, False)
+    ["upvote-comment", comment_id] -> {
+      process.send(statistics_subj, statistics_worker.IncrementCommentUpvotes)
+      vote_comment(request, server_subj, comment_id, True)
+    }
+    ["downvote-comment", comment_id] -> {
+      process.send(statistics_subj, statistics_worker.IncrementCommentDownvotes)
+      vote_comment(request, server_subj, comment_id, False)
+    }
 
     // Message Endpoints
-    ["message-user"] -> message_user(request, server_subj)
+    ["message-user"] -> {
+      process.send(statistics_subj, statistics_worker.IncrementMessagesSent)
+      message_user(request, server_subj)
+    }
     ["unread-messages", username] ->
       get_unread_messages(request, server_subj, username)
     _ -> wisp.not_found()

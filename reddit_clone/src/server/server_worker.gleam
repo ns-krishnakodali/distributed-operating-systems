@@ -16,7 +16,7 @@ pub fn start_and_get_subj() -> ServerWorkerSubject {
   let user_profiles_state: Dict(String, UserProfileState) = dict.new()
   let subreddits_state: Dict(String, SubRedditState) = dict.new()
   let posts_state: Dict(String, PostState) = dict.new()
-  let comment_state: Dict(String, CommentState) = dict.new()
+  let comments_state: Dict(String, CommentState) = dict.new()
 
   let assert Ok(actor) =
     actor.new(#(
@@ -24,7 +24,7 @@ pub fn start_and_get_subj() -> ServerWorkerSubject {
       user_profiles_state,
       subreddits_state,
       posts_state,
-      comment_state,
+      comments_state,
     ))
     |> actor.on_message(handle_message)
     |> actor.start
@@ -769,8 +769,6 @@ fn handle_message(
                   actor.continue(state)
                 }
               }
-
-              actor.continue(state)
             }
             Error(_) -> {
               log.error("Post " <> post_id <> " does not exist")
@@ -1082,10 +1080,10 @@ fn update_user_profile_comments(
 ) -> UserProfileStateResult {
   case dict.get(user_profiles_state, username) {
     Ok(#(sns, pis, comment_ids_set, mis, uk)) -> {
-      case set.contains(comment_ids_set, comment_id) {
-        True -> Error("Comment ID " <> comment_id <> " already exists")
-        False ->
+      case !set.contains(comment_ids_set, comment_id) {
+        True ->
           Ok(#(sns, pis, set.insert(comment_ids_set, comment_id), mis, uk))
+        False -> Error("Comment ID " <> comment_id <> " already exists")
       }
     }
     Error(_) -> {
