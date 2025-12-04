@@ -11,11 +11,15 @@ pub const subreddit_prefix: String = "R_SubReddit"
 
 pub const post_prefix: String = "R_Post"
 
-pub const comment_prefix: String = "R_Comment"
+pub const comment_prefix: String = "U_Comment"
 
-pub const message_prefix: String = "R_Message"
+pub const message_prefix: String = "U_Message"
 
-pub const reply_prefix: String = "R_Reply"
+pub const reply_prefix: String = "U_Reply"
+
+pub const post_description: String = "Post_Description"
+
+pub const post_comment: String = "Comment_Data"
 
 // Generate a prefixed string of the given length
 pub fn generate_hex_string(length: Int, prefix: String) -> String {
@@ -32,8 +36,4 @@ pub fn get_time_difference(start_time: Float) {
 pub fn zipf_weight(rank: Int) {
   let assert Ok(rank) = float.power(int.to_float(rank), 1.2)
   1.0 /. rank
-}
-
-pub fn get_random_username(num_users) -> String {
-  user_prefix <> int.to_string(int.random(num_users) + 1)
 }

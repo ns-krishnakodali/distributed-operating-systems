@@ -7,7 +7,7 @@ import wisp.{type Request, type Response}
 
 import server/server_worker.{
   type CommentInfo, type PostInfo, type ServerWorkerSubject, type SubRedditInfo,
-  type UserMessageInfo,
+  type UserInfo, type UserMessageInfo,
 }
 import server/web
 
@@ -43,6 +43,7 @@ pub fn handle_request(
     ["subreddit-posts", subreddit_name] ->
       get_subreddit_posts(request, server_subj, subreddit_name)
     ["posts"] -> get_posts(request, server_subj)
+    ["download-post"] -> download_post(request, server_subj)
     ["upvote-post", post_id] -> vote_post(request, server_subj, post_id, True)
     ["downvote-post", post_id] ->
       vote_post(request, server_subj, post_id, False)
@@ -90,7 +91,9 @@ fn login_user(request: Request, server_subj: ServerWorkerSubject) -> Response {
       case status {
         True ->
           wisp.created()
-          |> wisp.string_body("User " <> username <> " has logged in successfully")
+          |> wisp.string_body(
+            "User " <> username <> " has logged in successfully",
+          )
         False ->
           wisp.bad_request("An issue occured when logging in user " <> username)
       }
@@ -110,7 +113,7 @@ fn sign_up_user(request: Request, server_subj: ServerWorkerSubject) -> Response 
       let username: String = user.username
 
       let status: Bool =
-        process.call(server_subj, 1000, server_worker.SignUpUser(
+        process.call(server_subj, 5000, server_worker.SignUpUser(
           _,
           username,
           user.password,
@@ -160,15 +163,22 @@ fn sign_out_user(request: Request, server_subj: ServerWorkerSubject) -> Response
 fn get_users(
   request: Request,
   server_subj: ServerWorkerSubject,
-  active_users: Bool,
+  active_status: Bool,
 ) -> Response {
   use <- wisp.require_method(request, Get)
 
-  let usernames_info: List(String) =
-    process.call(server_subj, 1000, server_worker.GetUsers(_, active_users))
+  let usernames_info: List(UserInfo) =
+    process.call(server_subj, 1000, server_worker.GetUsers(_, active_status))
 
-  let usernames_body =
-    json.array(usernames_info, fn(username: String) { json.string(username) })
+  let usernames_body: String =
+    json.array(usernames_info, fn(user_info: UserInfo) {
+      let #(username, der, pem) = user_info
+      json.object([
+        #("username", json.string(username)),
+        #("der", json.string(der)),
+        #("pem", json.string(pem)),
+      ])
+    })
     |> json.to_string
 
   wisp.ok()
@@ -466,6 +476,62 @@ fn get_posts(request: Request, server_subj: ServerWorkerSubject) {
   |> wisp.json_body(posts_data)
 }
 
+fn download_post(request: Request, server_subj: ServerWorkerSubject) {
+  use <- wisp.require_method(request, Post)
+  use json_data <- wisp.require_json(request)
+
+  let download_post_data: Result(DownloadPost, List(decode.DecodeError)) = {
+    use download_post <- result.try(
+      decode.run(json_data, {
+        use post_id <- decode.field("post_id", decode.string)
+        use username <- decode.field("username", decode.string)
+        decode.success(DownloadPost(post_id:, username:))
+      }),
+    )
+    Ok(download_post)
+  }
+
+  case download_post_data {
+    Ok(download_post_info) -> {
+      let post_id: String = download_post_info.post_id
+      let username: String = download_post_info.username
+
+      let download_info: server_worker.PostDownloadInfo =
+        process.call(server_subj, 1000, server_worker.DownloadPost(
+          _,
+          post_id,
+          username,
+        ))
+
+      let #(signature, post_id, created_username, post_description, karma) =
+        download_info
+
+      case signature {
+        "" -> {
+          wisp.bad_request(
+            "An issue occurred when downloading post " <> post_id,
+          )
+        }
+        _ -> {
+          let download_post_body: String =
+            json.object([
+              #("signature", json.string(signature)),
+              #("post_id", json.string(post_id)),
+              #("created_username", json.string(created_username)),
+              #("post_description", json.string(post_description)),
+              #("karma", json.int(karma)),
+            ])
+            |> json.to_string
+
+          wisp.ok()
+          |> wisp.json_body(download_post_body)
+        }
+      }
+    }
+    Error(_) -> wisp.unprocessable_content()
+  }
+}
+
 fn vote_post(
   request: Request,
   server_subj: ServerWorkerSubject,
@@ -712,4 +778,8 @@ type PostComment {
     username: String,
     comment: String,
   )
+}
+
+type DownloadPost {
+  DownloadPost(post_id: String, username: String)
 }

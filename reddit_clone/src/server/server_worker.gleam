@@ -1,10 +1,13 @@
+import gleam/bit_array
 import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/set.{type Set}
 import gleam/time/timestamp
 
+import lib/rsa.{type PrivateKey, type PublicKey}
 import log
 import utils
 
@@ -38,14 +41,20 @@ fn handle_message(
       let #(users_state, ups, srs, ps, cs): ServerWorkerState = state
 
       case dict.get(users_state, username) {
-        Ok(#(u_password, online_status)) ->
+        Ok(#(u_password, online_status, _, _)) ->
           case u_password == password && !online_status {
             True -> {
               log.info("User " <> username <> " logged in successfully")
+              let #(public_key, private_key) = rsa.generate_key_pair()
               process.send(reply_subj, True)
 
               actor.continue(#(
-                dict.insert(users_state, username, #(u_password, True)),
+                dict.insert(users_state, username, #(
+                  u_password,
+                  True,
+                  Some(public_key),
+                  Some(private_key),
+                )),
                 ups,
                 srs,
                 ps,
@@ -78,10 +87,17 @@ fn handle_message(
           actor.continue(state)
         }
         False -> {
+          log.info("User " <> username <> " signed up successfully")
           process.send(reply_subj, True)
+          let #(public_key, private_key) = rsa.generate_key_pair()
 
           actor.continue(#(
-            dict.insert(users_state, username, #(password, True)),
+            dict.insert(users_state, username, #(
+              password,
+              True,
+              Some(public_key),
+              Some(private_key),
+            )),
             dict.insert(user_profiles_state, username, #(
               set.new(),
               set.new(),
@@ -100,13 +116,18 @@ fn handle_message(
       let #(users_state, ups, srs, ps, cs): ServerWorkerState = state
 
       case dict.get(users_state, username) {
-        Ok(#(u_password, online_status)) ->
+        Ok(#(u_password, online_status, _, _)) ->
           case u_password == password && online_status {
             True -> {
               process.send(reply_subj, True)
 
               actor.continue(#(
-                dict.insert(users_state, username, #(u_password, False)),
+                dict.insert(users_state, username, #(
+                  u_password,
+                  False,
+                  None,
+                  None,
+                )),
                 ups,
                 srs,
                 ps,
@@ -128,14 +149,24 @@ fn handle_message(
         }
       }
     }
-    GetUsers(reply_subj, active_users) -> {
+    GetUsers(reply_subj, active_status) -> {
       let users_state = state.0
-      let active_usernames: List(String) =
+      let active_usernames: List(UserInfo) =
         dict.to_list(users_state)
         |> list.filter_map(fn(entry) {
-          let #(username, #(_, online_status)) = entry
-          case active_users && online_status {
-            True -> Ok(username)
+          let #(username, #(_, online_status, public_key_option, _)) = entry
+          case active_status == online_status {
+            True -> {
+              case public_key_option {
+                Some(public_key) ->
+                  Ok(#(
+                    username,
+                    bit_array.base16_encode(public_key.der),
+                    public_key.pem,
+                  ))
+                None -> Ok(#(username, "", ""))
+              }
+            }
             False -> Error(Nil)
           }
         })
@@ -189,8 +220,14 @@ fn handle_message(
 
       case is_user_online(users_state, created_username) {
         True -> {
-          case !dict.has_key(subreddits_state, subreddit_name) {
+          case dict.has_key(subreddits_state, subreddit_name) {
             True -> {
+              log.error("SubReddit " <> subreddit_name <> " already exists")
+              process.send(reply_subj, False)
+
+              actor.continue(state)
+            }
+            False -> {
               case
                 update_user_profile_subreddits(
                   user_profiles_state,
@@ -226,12 +263,6 @@ fn handle_message(
                   actor.continue(state)
                 }
               }
-            }
-            False -> {
-              log.error("SubReddit " <> subreddit_name <> " already exists")
-              process.send(reply_subj, False)
-
-              actor.continue(state)
             }
           }
         }
@@ -470,8 +501,6 @@ fn handle_message(
       let subreddits_state: Dict(String, SubRedditState) = state.2
       let posts_state: Dict(String, PostState) = state.3
 
-      echo subreddit_name
-
       let post_details: List(PostInfo) = case
         dict.get(subreddits_state, subreddit_name)
       {
@@ -522,6 +551,61 @@ fn handle_message(
           )
         })
       process.send(reply_subj, post_details)
+
+      actor.continue(state)
+    }
+    DownloadPost(reply_subj, post_id, username) -> {
+      let users_state: Dict(String, UserState) = state.0
+      let posts_state: Dict(String, PostState) = state.3
+
+      let empty_download_post_info: PostDownloadInfo = #("", "", "", "", 0)
+
+      let download_post_info: PostDownloadInfo = case
+        is_user_online(users_state, username)
+      {
+        True -> {
+          case dict.get(posts_state, post_id) {
+            Ok(#(_, created_username, post_description, _, upvotes, downvotes)) -> {
+              let assert Ok(user_info) = dict.get(users_state, username)
+              case user_info.3 {
+                Some(private_key) -> {
+                  case
+                    rsa.sign_message(
+                      bit_array.from_string(post_id),
+                      private_key,
+                    )
+                  {
+                    Ok(signature) -> #(
+                      bit_array.base16_encode(signature),
+                      post_id,
+                      created_username,
+                      post_description,
+                      upvotes - downvotes,
+                    )
+                    Error(_) -> {
+                      log.error("Failed to sign with RSA key")
+                      empty_download_post_info
+                    }
+                  }
+                }
+                None -> {
+                  log.error("No RSA private key found for user " <> username)
+                  empty_download_post_info
+                }
+              }
+            }
+            Error(_) -> {
+              log.error("Post " <> post_id <> " not found")
+              empty_download_post_info
+            }
+          }
+        }
+        False -> {
+          log.error("Username " <> username <> " unavailable")
+          empty_download_post_info
+        }
+      }
+      process.send(reply_subj, download_post_info)
 
       actor.continue(state)
     }
@@ -832,10 +916,8 @@ fn handle_message(
 
     MessageUser(reply_subj, sender_username, receiver_username, message) -> {
       let #(users_state, user_profiles_state, srs, ps, cs) = state
-      case
-        is_user_online(users_state, sender_username)
-        && is_user_online(users_state, receiver_username)
-      {
+      case is_user_online(users_state, sender_username) {
+        // Can send self messages
         True -> {
           case
             dict.get(user_profiles_state, sender_username),
@@ -943,7 +1025,7 @@ fn is_user_online(
   username: String,
 ) -> Bool {
   case dict.get(users_state, username) {
-    Ok(#(_up, online_status)) -> online_status
+    Ok(#(_, online_status, _, _)) -> online_status
     Error(_) -> False
   }
 }
@@ -959,7 +1041,10 @@ fn update_user_profile_subreddits(
       case set.contains(subreddit_names_set, subreddit_name) {
         True ->
           Error(
-            "User " <> username <> " alredy joined subreddit " <> subreddit_name,
+            "User "
+            <> username
+            <> " already joined subreddit "
+            <> subreddit_name,
           )
         False -> {
           let updated_subreddits_set: Set(String) = case add_sr {
@@ -1046,9 +1131,9 @@ pub type DirectMessage =
 pub type UsersMessages =
   Dict(String, List(DirectMessage))
 
-// password, online_status
+// password, online_status, public_key, private_key
 pub type UserState =
-  #(String, Bool)
+  #(String, Bool, Option(PublicKey), Option(PrivateKey))
 
 // subreddit_names_set, post_ids_set, comment_ids_set, users_messages, karma
 pub type UserProfileState =
@@ -1066,6 +1151,10 @@ pub type PostState =
 pub type CommentState =
   #(String, String, String, String, Int, Int)
 
+// username, der, pem
+pub type UserInfo =
+  #(String, String, String)
+
 // subreddit_name, rank
 pub type SubRedditInfo =
   #(String, Int)
@@ -1073,6 +1162,10 @@ pub type SubRedditInfo =
 // subreddit_name, post_id, post_description, comment_ids
 pub type PostInfo =
   #(String, String, String, List(String))
+
+// signature, post_id, created_username, post_description, karma
+pub type PostDownloadInfo =
+  #(String, String, String, String, Int)
 
 // post_id, comment_id, parent_comment_id, comment
 pub type CommentInfo =
@@ -1102,7 +1195,7 @@ pub type ServerWorkerMessage {
   LogInUser(Subject(Bool), String, String)
   SignUpUser(Subject(Bool), String, String)
   SignOutUser(Subject(Bool), String, String)
-  GetUsers(Subject(List(String)), Bool)
+  GetUsers(Subject(List(UserInfo)), Bool)
   GetUserSubReddits(Subject(List(String)), String)
   GetUserPosts(Subject(List(String)), String)
 
@@ -1116,6 +1209,7 @@ pub type ServerWorkerMessage {
   PostInSubReddit(Subject(Bool), String, String, String)
   GetSubRedditPostsFeed(Subject(List(PostInfo)), String)
   GetPostsFeed(Subject(List(PostInfo)))
+  DownloadPost(Subject(PostDownloadInfo), String, String)
   UpVotePost(Subject(Bool), String)
   DownVotePost(Subject(Bool), String)
 

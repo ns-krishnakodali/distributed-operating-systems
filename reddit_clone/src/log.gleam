@@ -1,7 +1,7 @@
 import gleam/io
 
 pub fn heading(heading: String) -> Nil {
-  io.println("========== " <> heading <> " ==========")
+  io.println("\n\n========== " <> heading <> " ==========\n\n")
 }
 
 pub fn info(message: String) -> Nil {

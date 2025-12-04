@@ -1,5 +1,4 @@
 import gleam/bit_array
-import gleam/result
 
 pub fn decode_pem_to_der(pem_key: String) -> Result(BitArray, String) {
   do_decode_pem_to_der(bit_array.from_string(pem_key))
@@ -15,14 +14,6 @@ pub fn generate_key_pair() -> #(PublicKey, PrivateKey) {
 
 pub fn sign_message(msg: BitArray, key: PrivateKey) -> Result(BitArray, String) {
   do_sign_message(msg, key.der)
-}
-
-pub fn sign_message_with_pem_string(
-  msg: BitArray,
-  key_pem: String,
-) -> Result(BitArray, String) {
-  use key_der <- result.try(decode_pem_to_der(key_pem))
-  do_sign_message(msg, key_der)
 }
 
 pub fn verify_message(
@@ -66,32 +57,32 @@ pub fn decrypt_message(msg: BitArray, key: PrivateKey) {
   }
 }
 
-@external(erlang, "rsa_keys_ffi", "decode_pem_to_der")
+@external(erlang, "rsa_ffi", "decode_pem_to_der")
 fn do_decode_pem_to_der(pem_key: BitArray) -> Result(BitArray, String)
 
-@external(erlang, "rsa_keys_ffi", "generate_rsa_key_pair")
+@external(erlang, "rsa_ffi", "generate_rsa_key_pair")
 fn do_generate_rsa_keys() -> #(String, String, BitArray, BitArray)
 
-@external(erlang, "rsa_keys_ffi", "sign_message")
+@external(erlang, "rsa_ffi", "sign_message")
 fn do_sign_message(
   msg: BitArray,
   private_key: BitArray,
 ) -> Result(BitArray, String)
 
-@external(erlang, "rsa_keys_ffi", "verify_message")
+@external(erlang, "rsa_ffi", "verify_message")
 fn do_verify_message(
   msg: BitArray,
   public_key: BitArray,
   sig: BitArray,
 ) -> Result(SignatureType, String)
 
-@external(erlang, "rsa_keys_ffi", "encrypt_message")
+@external(erlang, "rsa_ffi", "encrypt_message")
 fn do_encrypt_message(
   msg: BitArray,
   public_key: BitArray,
 ) -> Result(BitArray, String)
 
-@external(erlang, "rsa_keys_ffi", "decrypt_message")
+@external(erlang, "rsa_ffi", "decrypt_message")
 fn do_decrypt_message(
   msg: BitArray,
   private_key: BitArray,

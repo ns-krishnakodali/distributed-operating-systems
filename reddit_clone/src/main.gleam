@@ -15,7 +15,7 @@ import server/router
 pub fn main() -> Nil {
   let line: String =
     get_line(
-      "Enter number of users (min 100) and duration (in secs) for simulation: \n",
+      "Enter number of users (min 50) and duration (in secs) for simulation: \n",
     )
   case parse_input_line(line) {
     Ok(#(num_users, num_seconds)) -> {
@@ -44,7 +44,7 @@ fn parse_input_line(line: String) -> Result(#(Int, Int), String) {
     [num_users, num_seconds] -> {
       case int.parse(num_users) {
         Ok(num_users) -> {
-          case num_users >= 100 {
+          case num_users >= 50 {
             True -> {
               case
                 int.parse(string.replace(num_seconds, each: "\n", with: ""))
@@ -53,7 +53,7 @@ fn parse_input_line(line: String) -> Result(#(Int, Int), String) {
                 Error(_) -> Error("Number of seconds must be a valid integer")
               }
             }
-            False -> Error("Number of users must be at least 100")
+            False -> Error("Number of users must be at least 50")
           }
         }
         Error(_) -> Error("Number of users must be a valid integer")

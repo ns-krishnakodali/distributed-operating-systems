@@ -5,7 +5,7 @@ import gleam/result
 
 import log
 
-pub fn get_request(url: String, query_params: List(#(String, String))) {
+pub fn get(url: String, query_params: List(#(String, String))) {
   log.info("Sending GET request to: " <> url)
   let assert Ok(base_request) = request.to(url)
 
@@ -18,11 +18,7 @@ pub fn get_request(url: String, query_params: List(#(String, String))) {
   Ok(response.body)
 }
 
-pub fn post_request(
-  url: String,
-  body: String,
-  query_params: List(#(String, String)),
-) {
+pub fn post(url: String, body: String, query_params: List(#(String, String))) {
   log.info("Sending POST request to: " <> url <> " with payload " <> body)
   let assert Ok(base_request) = request.to(url)
 
