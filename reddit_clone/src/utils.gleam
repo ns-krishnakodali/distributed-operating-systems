@@ -5,15 +5,17 @@ import gleam/int
 import gleam/string
 import gleam/time/timestamp
 
-pub const user_prefix: String = "R/User"
+pub const user_prefix: String = "R_User"
 
-pub const subreddit_prefix: String = "R/SubReddit"
+pub const subreddit_prefix: String = "R_SubReddit"
 
-pub const post_prefix: String = "R/Post"
+pub const post_prefix: String = "R_Post"
 
-pub const comment_prefix: String = "R/Comment"
+pub const comment_prefix: String = "R_Comment"
 
-pub const message_prefix: String = "R/Message"
+pub const message_prefix: String = "R_Message"
+
+pub const reply_prefix: String = "R_Reply"
 
 // Generate a prefixed string of the given length
 pub fn generate_hex_string(length: Int, prefix: String) -> String {

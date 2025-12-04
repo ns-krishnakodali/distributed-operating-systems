@@ -25,7 +25,7 @@ pub fn main() -> Nil {
       process.sleep(1000)
 
       log.heading("Server started successfully, beginning reddit simulation.")
-      reddit_simulation.bootstrap_simulation(num_users)
+      reddit_simulation.bootstrap(num_users)
 
       process.sleep(num_seconds * 1000)
     }
