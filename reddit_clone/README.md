@@ -1,24 +1,37 @@
-# reddit_clone
+# Reddit Clone
 
-[![Package Version](https://img.shields.io/hexpm/v/reddit_clone)](https://hex.pm/packages/reddit_clone)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/reddit_clone/)
+A Reddit clone simulator developed in `gleam` leevraging the actor model.
 
-```sh
-gleam add reddit_clone@1
-```
-```gleam
-import reddit_clone
+## Input Format
 
-pub fn main() -> Nil {
-  // TODO: An example of the project in use
-}
+To run the program, use the following format:
+
+```text
+num_nodes num_seconds
 ```
 
-Further documentation can be found at <https://hexdocs.pm/reddit_clone>.
+Where:
 
-## Development
+- `num_nodes`: number of different users for the simulation
+- `num_seconds`: amount of time to run the simulation (in secs)
 
-```sh
-gleam run   # Run the project
-gleam test  # Run the tests
+### Examples
+
+```text
+100 100
+500 2000
 ```
+
+The program upon execution will start the server, bootstrap the simulation, and collect the statistics.
+
+## What is Working
+
+- **User creation**: Multiple simulated users can participate on the platform.  
+- **Post creation**: Users can create posts successfully.  
+- **Commenting**: Users can comment on posts.  
+- **Voting**: Upvotes and downvotes are correctly registered and affect post scores.  
+- **Post ranking**: Posts are ranked according to votes and activity.  
+- **Network interactions**: User actions are correctly simulated over the REST API.  
+- **Digital signatures**: Users can verify post integrity using RSA public key signatures.  
+- **Activity tracking**: The system collects and reports statistics such as the number of posts, comments, and votes over time.  
+- **Scalability**: Supports a large number of users while maintaining correctness in post and comment propagation.
